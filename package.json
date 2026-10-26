@@ -1,0 +1,25 @@
+{
+  "name": "shizhang-reimbursement",
+  "version": "1.0.0",
+  "description": "拾账 · 本地报销管理",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test tests/*.test.js",
+    "test:e2e": "node tests/e2e.js",
+    "pack": "electron-packager . 拾账 --platform=win32 --arch=x64 --out=dist --icon=assets/icon.ico --asar.unpack-dir=node_modules --extra-resource=lib/ocr.ps1 --overwrite --ignore=\"^/(tests|dist|artifacts|scripts)(/|$)\""
+  },
+  "dependencies": {
+    "@tesseract.js-data/eng": "^1.0.0",
+    "lucide": "^1.60.0",
+    "pdfjs-dist": "^5.4.624",
+    "tesseract.js": "^7.0.0"
+  },
+  "devDependencies": {
+    "@electron/packager": "^19.0.1",
+    "electron": "^42.0.0",
+    "pdf-lib": "^1.17.1",
+    "playwright": "^1.58.0"
+  }
+}

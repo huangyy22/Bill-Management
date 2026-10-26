@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-src data:; object-src data:; connect-src 'none'">
+  <title>拾账 · 报销管理</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand"><div class="brand-icon">拾</div><div><strong>拾账</strong><small>让每一笔都有着落</small></div></div>
+    <div class="workspace"><span class="live-dot"></span>我的报销空间<span class="local-tag">本地</span></div>
+    <nav><button id="nav-active" class="nav-item active"><span><i data-lucide="clock-3"></i></span>正在报销<b id="active-count">0</b></button><button id="nav-completed" class="nav-item"><span><i data-lucide="circle-check"></i></span>已报销<b id="completed-count">0</b></button><button id="nav-history" class="nav-item"><span><i data-lucide="history"></i></span>操作记录</button></nav>
+    <div class="side-section"><span id="projects-label">正在报销的项目</span><button id="new-project-icon" class="icon-button" title="新建项目"><i data-lucide="plus"></i></button></div>
+    <div id="project-list" class="project-list"></div>
+    <button id="new-project" class="new-project"><i data-lucide="plus"></i> 新建报销项目</button>
+    <div class="sidebar-bottom"><div class="folder-location"><span><i data-lucide="folder"></i></span><div><strong>文件保存在你的电脑</strong><small id="root-label">Documents / 报销</small></div></div><button id="open-root" class="text-button">打开报销文件夹 <i data-lucide="external-link"></i></button></div>
+  </aside>
+  <main>
+    <header class="topbar"><div class="breadcrumbs"><span>我的工作台</span><i>/</i><strong id="breadcrumb">正在报销</strong></div><div class="top-actions"><button id="refresh" class="icon-button" title="刷新目录"><i data-lucide="refresh-cw"></i></button><span class="avatar">我</span></div></header>
+    <div class="content">
+      <div class="page-heading"><h1 id="page-title">正在报销</h1><button id="add-files" class="primary-button"><i data-lucide="plus"></i> 添加凭证</button></div>
+      <section class="stats" id="stats"></section>
+      <div id="workspace-content"></div>
+    </div>
+  </main>
+  <div id="drag-overlay" class="drag-overlay hidden"><div><div class="drop-big-icon"><i data-lucide="arrow-down-to-line"></i></div><h2>把凭证放在这里</h2><p>自动识别类别与金额，归档到当前项目</p></div></div>
+  <div id="import-overlay" class="modal-overlay hidden">
+    <section class="import-panel" role="dialog" aria-modal="true" aria-labelledby="import-title">
+      <div class="panel-heading"><div><div class="eyebrow">SMART IMPORT</div><h2 id="import-title">把凭证交给拾账</h2><p>识别、改名、归档，一次完成。</p></div><button id="close-import" class="icon-button close-button" aria-label="关闭"><i data-lucide="x"></i></button></div>
+      <div class="import-scroll">
+        <div class="target-box"><span>归档到</span><select id="import-target"></select><span class="target-status">正在报销</span></div>
+        <div class="import-options"><div class="segmented"><button id="mode-separate" class="selected">每份文件各记一笔</button><button id="mode-grouped">多份附件合为一笔</button></div><label class="check-label"><input id="auto-import" type="checkbox"> 可靠识别后自动归档</label></div>
+        <div id="group-fields" class="group-fields hidden"><label>这笔费用的类别<select id="group-category"></select></label><label id="group-route-label" class="hidden">高铁行程<input id="group-route" type="text" placeholder="长沙南-杭州东"></label><label>总金额（元）<input id="group-amount" type="text" inputmode="decimal" placeholder="例如 40.00"></label><p>本次所有附件合为一笔，放进“类别-金额”文件夹。不同车次或不同乘客的车票请分别记账。</p></div>
+        <div id="analysis-status" class="analysis-status"></div>
+        <div id="import-rows" class="import-rows"></div>
+        <div id="import-warning" class="warning hidden"></div>
+        <div class="import-hint"><span><i data-lucide="undo-2"></i></span><p>归档会剪切原文件。同名自动加序号，不覆盖已有凭证。发票和对应行程单请合为一笔，避免重复统计；同价的不同车票各记一笔。可以在操作记录中撤回。</p></div>
+      </div>
+      <div id="same-expense-note" class="same-expense-note hidden" role="status"><span id="same-expense-text"></span><button id="merge-current-batch" class="text-button hidden" type="button"></button></div>
+      <div id="import-validation" class="import-validation hidden" role="status" aria-live="polite"><strong id="validation-title"></strong><div id="validation-items"></div></div>
+      <div class="panel-bottom"><div><small>本次计入</small><strong id="import-total">¥0.00</strong><span id="import-count"></span></div><button id="confirm-import" class="primary-button" aria-describedby="validation-title">确认并归档 <i data-lucide="arrow-right"></i></button></div>
+    </section>
+  </div>
+  <div id="simple-overlay" class="modal-overlay hidden"><section class="small-dialog" role="dialog" aria-modal="true"><h2 id="simple-title"></h2><p id="simple-description"></p><input id="simple-input" class="hidden" maxlength="100"><div id="simple-error" class="form-error"></div><div class="dialog-actions"><button id="simple-cancel" class="secondary-button">取消</button><button id="simple-confirm" class="primary-button">确认</button></div></section></div>
+  <div id="preview-overlay" class="modal-overlay hidden"><section class="preview-panel" role="dialog" aria-modal="true"><div class="preview-heading"><strong id="preview-title"></strong><button id="close-preview" class="icon-button" aria-label="关闭预览"><i data-lucide="x"></i></button></div><div id="preview-body"></div></section></div>
+  <div id="toast" class="toast hidden" role="status"></div>
+  <script src="../node_modules/lucide/dist/umd/lucide.min.js"></script>
+  <script src="../lib/naming.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
