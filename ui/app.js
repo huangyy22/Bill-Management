@@ -315,6 +315,15 @@ function closeImport() { if (!state.analyzing && !state.importing) { clearTimeou
 $('#new-project').onclick = $('#new-project-icon').onclick = newProject;
 $('#add-files').onclick = pickFiles;
 $('#open-root').onclick = () => attempt(() => api.open(''));
+$('#change-root').onclick = () => attempt(async () => {
+  const snapshot = await api.changeRoot();
+  if (!snapshot) return;
+  state.snapshot = snapshot;
+  state.selected = ''; state.view = 'active'; state.search = ''; state.category = '';
+  localStorage.removeItem('selectedProject');
+  render();
+  toast('已切换到新的报销文件夹');
+});
 $('#refresh').onclick = () => attempt(async () => { await refresh(); toast('目录已刷新'); });
 $('#close-import').onclick = closeImport;
 $('#confirm-import').onclick = performImport;

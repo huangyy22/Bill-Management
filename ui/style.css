@@ -38,6 +38,7 @@ input[type=checkbox] { accent-color:var(--blue); }
 .folder-location strong { font-size:11px; font-weight:500; }
 .folder-location small { display:block; font-size:10px; color:#a1a9b6; margin-top:6px; max-width:170px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
 .text-button { background:transparent; color:var(--blue); padding:12px 0 0; font-size:11px; }
+.sidebar-actions { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
 main { margin-left:244px; width:calc(100% - 244px); }
 .topbar { height:75px; border-bottom:1px solid var(--line); background:#fff; display:flex; align-items:center; justify-content:space-between; padding:0 40px; }
 .breadcrumbs { display:flex; align-items:center; gap:15px; font-size:12px; color:#8d97a8; }

@@ -7,19 +7,51 @@ const { analyze } = require('./lib/extract');
 const { CATEGORIES } = require('./lib/recognize');
 const { exportPrintFolder } = require('./lib/export-print');
 
-let window, store;
+let window, store, configPath;
 const allowedSources = new Set();
 const testMode = process.env.SHIZHANG_TEST === '1';
-const root = testMode ? process.env.SHIZHANG_TEST_ROOT : path.join(app.getPath('documents'), '报销');
-if (testMode) app.setPath('userData', path.join(root, '.test-profile'));
+const testRoot = process.env.SHIZHANG_TEST_ROOT;
+if (testMode) app.setPath('userData', path.join(testRoot, '.test-profile'));
+
+async function readConfig() {
+  try { return JSON.parse(await fs.readFile(configPath, 'utf8')); } catch { return {}; }
+}
+async function writeConfig(config) {
+  const temp = configPath + '.tmp';
+  await fs.mkdir(path.dirname(configPath), { recursive: true });
+  await fs.writeFile(temp, JSON.stringify(config, null, 2), 'utf8');
+  await fs.rename(temp, configPath);
+}
+async function pickFolder(title, defaultPath) {
+  const result = await dialog.showOpenDialog({ title, defaultPath, buttonLabel: '使用此文件夹', properties: ['openDirectory'] });
+  return result.canceled || !result.filePaths[0] ? '' : path.resolve(result.filePaths[0]);
+}
+async function resolveRoot() {
+  if (testMode) return testRoot;
+  const config = await readConfig();
+  if (config.root) {
+    const stat = await fs.stat(config.root).catch(() => null);
+    if (stat?.isDirectory()) return path.resolve(config.root);
+  }
+  const selected = await pickFolder('首次使用：选择报销文件夹', app.getPath('documents'));
+  if (selected) return selected;
+  await dialog.showMessageBox({ type: 'info', title: '拾账', message: '需要选择一个报销文件夹才能开始使用。', buttons: ['退出'] });
+  app.quit();
+  return '';
+}
+
 const singleton = app.requestSingleInstanceLock();
 if (!singleton) app.quit();
 else {
   app.on('second-instance', () => { if (window) { if (window.isMinimized()) window.restore(); window.focus(); } });
   app.whenReady().then(async () => {
     try {
+      configPath = path.join(app.getPath('userData'), 'config.json');
+      const root = await resolveRoot();
+      if (!root) return;
       store = new Store(root);
       await store.init();
+      if (!testMode) await writeConfig({ ...(await readConfig()), root: store.root });
       if (process.platform === 'win32') execFile('attrib.exe', ['+H', store.meta], { windowsHide: true }, () => {});
       window = new BrowserWindow({ width: 1440, height: 940, minWidth: 1080, minHeight: 720, title: '拾账 · 报销管理', icon: path.join(__dirname, 'assets', 'icon.png'), backgroundColor: '#f6f7fa', autoHideMenuBar: true, webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
       window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -38,6 +70,19 @@ function handle(channel, fn) {
 }
 handle('snapshot', () => store.snapshot());
 handle('categories', () => CATEGORIES);
+handle('change-root', async () => {
+  if (store.busy) throw new Error('正在处理上一项操作，请稍后再试');
+  const selected = await pickFolder('选择报销文件夹', path.dirname(store.root));
+  if (!selected || selected === store.root) return null;
+  if (inside(store.root, selected)) throw new Error('请选择当前报销文件夹以外的文件夹');
+  const candidate = new Store(selected);
+  await candidate.init();
+  await writeConfig({ ...(await readConfig()), root: candidate.root });
+  allowedSources.clear();
+  store = candidate;
+  if (process.platform === 'win32') execFile('attrib.exe', ['+H', store.meta], { windowsHide: true }, () => {});
+  return store.snapshot();
+});
 handle('pick-files', async () => {
   const result = await dialog.showOpenDialog(window, { title: '选择需要归档的报销凭证', properties: ['openFile', 'multiSelections'] });
   return result.canceled ? [] : result.filePaths;
