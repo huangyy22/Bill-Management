@@ -77,7 +77,7 @@ handle('open', async (relative, reveal = false) => {
   if (!inside(await fs.realpath(store.root), await fs.realpath(file))) throw new Error('文件链接指向报销目录外');
   if (reveal) { shell.showItemInFolder(file); return; }
   const stat = await fs.stat(file);
-  if (!stat.isDirectory() && !['.pdf', '.png', '.jpg', '.jpeg', '.bmp', '.webp', '.gif', '.docx', '.xlsx', '.doc', '.xls', '.txt', '.zip', '.rar', '.7z'].includes(path.extname(file).toLowerCase())) throw new Error('请在资源管理器中打开此类型文件');
+  if (!stat.isDirectory() && !['.pdf', '.png', '.jpg', '.jpeg', '.bmp', '.webp', '.gif', '.docx', '.xlsx', '.doc', '.xls', '.txt', '.zip', '.rar', '.7z'].includes(path.extname(file).toLowerCase())) throw new Error('请在文件管理器中打开此类型文件');
   const error = await shell.openPath(file); if (error) throw new Error(error);
 });
 handle('preview', async file => {
@@ -87,7 +87,7 @@ handle('preview', async file => {
   const ext = path.extname(absolute).toLowerCase();
   const mime = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif', '.bmp': 'image/bmp', '.pdf': 'application/pdf' }[ext];
   if (!mime) return null;
-  if ((await fs.stat(absolute)).size > 30 * 1024 * 1024) throw new Error('文件较大，请在资源管理器中预览');
+  if ((await fs.stat(absolute)).size > 30 * 1024 * 1024) throw new Error('文件较大，请在文件管理器中预览');
   return { mime, data: (await fs.readFile(absolute)).toString('base64') };
 });
 handle('export', async relative => {
