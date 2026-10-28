@@ -2,13 +2,47 @@
 
 我的拾账报销平台：Windows 与 Linux 都能用的本地桌面报销助手。文件仅保存于当前电脑，不上传云端。
 
-## 直接运行
+## 安装与运行
 
-- Windows：双击桌面上的“拾账 · 报销管理”快捷方式，或运行打包目录中的 `拾账.exe`。请正常双击启动；以管理员身份运行时，Windows 会阻止从普通资源管理器拖入文件。
-- Linux：安装 Node.js 22.12 或更高版本，在项目目录执行 `npm install`、`npm start`；也可以用 `npm run pack:linux` 打包后运行 `dist/拾账-linux-x64/拾账`。
-- 手动开发或构建：安装 Node.js 22.12 或更高版本，执行 `npm install`、`npm start`。
+### Windows
 
-首次启动自动使用 `文档/报销` 目录（Windows 显示为 `文档\报销`），并创建隐藏子文件夹 `.拾账` 存放可恢复的金额补记和撤销记录；不会自动移动或更改任何现有凭证。若目录不存在，应用会创建它。点击左下角可打开实际目录。
+从源码运行：
+
+1. 安装 [Node.js](https://nodejs.org/) 22.12 或更高版本。
+2. 在项目目录执行 `npm install`。
+3. 执行 `npm start`。
+
+打包为免安装应用：
+
+- 执行 `npm run pack`，结果输出到 `dist\拾账-win32-x64\`（首次构建会下载 Electron 运行时）。
+- 将整个 `拾账-win32-x64` 文件夹复制到任意位置，双击其中的 `拾账.exe` 即可；可右键创建桌面快捷方式。
+- 请正常双击启动；以管理员身份运行会阻止从资源管理器向窗口拖入文件。
+
+### Linux
+
+从源码运行：
+
+1. 安装 Node.js 22.12 或更高版本。
+2. 在项目目录执行 `npm install`。
+3. 执行 `npm start`。
+
+打包为免安装应用：
+
+- 执行 `npm run pack:linux`，结果输出到 `dist/拾账-linux-x64/`（首次构建会下载 Electron 运行时）。
+- 将整个 `拾账-linux-x64` 文件夹复制到任意位置（例如 `~/.local/opt/shizhang`），双击其中的 `拾账` 即可；也可以在桌面创建 `.desktop` 启动器。
+- Ubuntu 22.04/24.04 桌面版通常已具备运行库；若启动时提示缺少共享库，可安装 `libgtk-3-0 libnss3 libasound2`。
+- 若 Electron 提示 SUID sandbox 错误，可临时执行 `npm start -- --no-sandbox`；长期方案是启用非特权用户命名空间（`sysctl kernel.unprivileged_userns_clone=1`）。
+- 打包时若遇到证书校验失败（使用自定义 CA 的网络环境），可改用 `NODE_OPTIONS=--use-system-ca npm run pack:linux`（Node.js 24+）。
+
+### 首次启动
+
+首次启动会自动使用系统“文档”目录下的 `报销` 文件夹（Windows 为 `文档\报销`，Linux 中文系统为 `~/文档/报销`，英文系统为 `~/Documents/报销`），并创建隐藏子文件夹 `.拾账` 存放可恢复的金额补记和撤销记录；不会移动或更改任何现有凭证。若目录不存在，应用会创建它。点击左下角可打开实际目录。
+
+从 Windows 迁移到 Linux 时，把原来的 `文档\报销` 整个文件夹复制到 Linux 对应的文档目录，连同隐藏的 `.拾账` 一起保留，即可继续管理已有项目。
+
+### OCR
+
+Windows 使用系统 OCR。Linux 使用内置的离线中文（chi_sim）与英文语言数据，无需联网；若系统已安装带中文语言包的 `tesseract`（`sudo apt install tesseract-ocr tesseract-ocr-chi-sim`），会优先使用系统版本，速度更快。
 
 ## 使用
 
@@ -23,18 +57,14 @@
 
 若不同凭证被识别为相同类别、相同金额，应用会提醒检查是否应合并。勾选“可靠识别后自动归档”后，后续拖入的明确凭证会在识别后等待 3 秒自动剪切；修改内容或关闭导入窗口即可取消。本项默认关闭；多金额、类别不明和多份附件合为一笔时需手动核对确认。未选项目时不会自动决定去向。
 
-## 验证与打包
+## 数据与隐私
 
-- `npm test` 运行金额识别、去重、改名、归档、撤回和状态流转测试。
-- `npm run pack` 创建 Windows x64 免安装应用至 `dist`；`npm run pack:linux` 创建 Linux x64 应用至 `dist`。可复制应用目录中的可执行文件快捷方式至桌面；无需安装管理员级软件。首次构建会下载 Electron 运行时。
-- 应用设置单实例锁，不保存 OCR 识别原文。
+- 所有凭证仅保存在本机“文档/报销”目录，不上传网络；应用不保存 OCR 识别原文。
+- CSV 导出只生成清单，打印包只复制凭证，均不会修改源文件。
+- 迁移或备份时请连同隐藏的 `.拾账` 一起保留。
+- 应用设置单实例锁，不会同时打开多个窗口。
 
-## Linux 说明
+## 开发与验证
 
-- 从 Windows 换到 Linux 时，把原来的 `文档\报销` 整个文件夹复制到 Linux 的 `文档/报销`（中文系统通常为 `~/文档/报销`，英文系统为 `~/Documents/报销`），连同隐藏的 `.拾账` 一起保留，就能继续管理已有项目。
-- OCR 默认使用内置的离线中文（chi_sim）与英文语言数据，复制到系统临时目录后即可识别，不依赖网络。若系统已安装 `tesseract`（例如 `sudo apt install tesseract-ocr tesseract-ocr-chi-sim`），应用会自动优先使用系统版本，速度更快。
-- 若启动时 Electron 提示 SUID sandbox 错误，可先执行 `npm start -- --no-sandbox` 临时绕过；长期方案是启用 Ubuntu 的非特权用户命名空间（`sysctl kernel.unprivileged_userns_clone=1`）。
-- 打开文件或“在文件管理器中显示”通过系统默认应用（`xdg-open`）完成；若没有任何反应，请确认已安装桌面文件管理器。
-- 备份可针对 `文档/报销` 整个目录进行，连同隐藏的 `.拾账` 一起保留。
-
-如希望每周备份已归档文件，Windows 可在文件历史记录中包括 `Documents\报销` 文件夹；Linux 可用 rsync 或定时任务备份对应的 `文档/报销` 目录。此应用不会将本地凭证上传或备份至网络。
+- `npm start` 开发运行；`npm run pack`（Windows）和 `npm run pack:linux`（Linux）用于打包。
+- `npm test` 运行金额识别、去重、改名、归档、撤回和状态流转测试（测试文件位于本地 `tests/`，未包含在仓库中）。
