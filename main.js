@@ -112,6 +112,7 @@ handle('import', async options => {
   if (!options.rows?.every(row => allowedSources.has(path.resolve(row.path)))) throw new Error('请先选择或拖入文件');
   return store.importFiles(options);
 });
+handle('organize', options => store.organizeExisting(options));
 handle('create-project', name => store.createProject(name));
 handle('rename', (relative, name) => store.renameEntry(relative, name));
 handle('status', (relative, complete) => store.markStatus(relative, complete));

@@ -20,6 +20,52 @@ function findNode(relative) {
 // Snapshots come from Node's path module, so separators differ between Windows and Linux.
 function parentOf(relative) { const index = Math.max(relative.lastIndexOf('/'), relative.lastIndexOf('\\')); return index < 0 ? '' : relative.slice(0, index); }
 function absoluteOf(relative) { const separator = state.snapshot.root.includes('\\') ? '\\' : '/'; return state.snapshot.root.replace(/[\\/]+$/, '') + separator + relative; }
+function defaultDocumentType(category, documentType) {
+  return category === '高铁' && ['', '发票', '订单'].includes(documentType || '') ? '车票' : (documentType || '');
+}
+function documentTypeOf(node) {
+  return receiptNaming.documentTypeFromText(node.name) || (node.category === '高铁' && /\.pdf$/i.test(node.name) ? '车票' : '');
+}
+function routeOf(node) {
+  const match = /^高铁[（(]([^）)]+)[）)]/.exec(node.name);
+  return match ? receiptNaming.cleanRoute(match[1]) : '';
+}
+function mergeMembers(node, nodes) {
+  if (node.isDirectory || !node.amountCents) return [];
+  const type = documentTypeOf(node);
+  if (!type) return [];
+  const parent = parentOf(node.relative);
+  const group = nodes.filter(other => !other.isDirectory && other.amountCents === node.amountCents &&
+    other.category === node.category && parentOf(other.relative) === parent &&
+    (node.category !== '高铁' || routeOf(other) === routeOf(node)) &&
+    documentTypeOf(other));
+  if (new Set(group.map(documentTypeOf)).size < 2) return [];
+  const members = [node];
+  for (const other of group) {
+    const otherType = documentTypeOf(other);
+    if (members.some(member => documentTypeOf(member) === otherType)) continue;
+    members.push(other);
+  }
+  return members;
+}
+function mergeGroups(nodes) {
+  const groups = new Map();
+  for (const node of nodes) {
+    if (node.isDirectory || !node.amountCents) continue;
+    const type = documentTypeOf(node);
+    if (!type) continue;
+    const key = [parentOf(node.relative), node.category, node.amountCents, node.category === '高铁' ? routeOf(node) : ''].join('\u0000');
+    const group = groups.get(key) || [];
+    group.push({ node, type });
+    groups.set(key, group);
+  }
+  return [...groups.values()].filter(group => new Set(group.map(item => item.type)).size > 1);
+}
+function mergeFolderName(node) {
+  const route = routeOf(node);
+  const label = node.category === '高铁' && route ? `高铁（${route}）` : (node.category || '其他');
+  return `${label}-${shortAmount(node.amountCents)}`;
+}
 function projectFor(relative) { return allProjects().find(p => relative === p.relative || relative.startsWith(p.relative + '/') || relative.startsWith(p.relative + '\\')); }
 function currentNode() { return findNode(state.selected); }
 function categoryOptions(selected, placeholder = true) { return (placeholder ? '<option value="">选择类别</option>' : '') + state.categories.map(c => `<option ${c === selected ? 'selected' : ''}>${escapeHTML(c)}</option>`).join(''); }
@@ -85,6 +131,8 @@ function renderWorkspace(node, projects) {
     html += `<div class="detail-toolbar"><button id="go-back" class="back-button">${icon('arrow-left')} ${parentIsProject ? '上一级' : '全部项目'}</button><span class="path-label">${escapeHTML(node.relative)}</span><button id="open-current" class="secondary-button">打开文件夹 ${icon('external-link')}</button><button id="export-current" class="secondary-button">${icon('file-down')} 导出清单</button>${projectRoot ? `<button id="export-print" class="secondary-button">${icon('printer')} 导出打印文件夹</button><button id="change-status" class="secondary-button">${icon(isActive ? 'circle-check' : 'rotate-ccw')} ${isActive ? '标记已报销' : '恢复正在报销'}</button>` : ''}</div>`;
     if (node.addedAmount) html += `<div class="notice">文件夹原标注 ¥${money(node.ownAmount)}，通过拾账新增 ¥${money(node.addedAmount)}，当前金额 ¥${money(node.amountCents)}。项目原名称保留；新增金额随操作记录保存。</div>`;
     if (node.ownAmount && !node.addedAmount && node.children.some(n => n.unknownCount) === false && node.children.reduce((s, n) => s + n.amountCents, 0) !== node.ownAmount) html += `<div class="notice">此文件夹按名称标注的 ¥${money(node.ownAmount)} 计入；内部可识别明细与标注不同，请核对附件是否属于同一笔费用。</div>`;
+    const mergeCount = isActive && projectRoot ? mergeGroups(node.children).length : 0;
+    if (mergeCount) html += `<div class="notice">发现 ${mergeCount} 组同金额凭证，可在右侧点“合并”把同一笔的附件合成一个费用文件夹。</div>`;
   }
   html += `<div class="section-heading"><h2>${node ? '凭证与费用' : '报销项目'} <span class="count-badge">${node ? node.children.length : projects.length}</span></h2><div class="section-actions"><input id="search" class="search-input" placeholder="搜索名称…" aria-label="搜索名称" value="${escapeHTML(state.search)}">${node ? `<select id="category-filter" class="filter-select" aria-label="筛选类别"><option value="">全部类别</option>${categoryOptions(state.category, false)}</select>` : ''}</div></div><div id="table-container"></div>`;
   if (!node && isActive && data.loose.length) html += `<section class="root-files-section"><div class="section-heading"><h2>根目录文件 <span class="count-badge">${data.loose.length}</span></h2></div><div id="root-files"></div></section>`;
@@ -105,9 +153,21 @@ function renderTable(nodes, projectList) {
   const filtered = nodes.filter(n => n.name.toLowerCase().includes(state.search.toLowerCase()) && (!state.category || n.category === state.category));
   if (!filtered.length) { $('#table-container').innerHTML = `<div class="list-card empty"><div class="empty-symbol">${icon('folder-open')}</div>${nodes.length ? '没有找到匹配的内容' : projectList ? '还没有项目，先创建一个报销项目吧。' : '这里还很清爽，拖入第一份凭证吧。'}</div>`; hydrateIcons(); return; }
   const isActive = state.view === 'active';
-  $('#table-container').innerHTML = `<div class="list-card"><table class="table"><colgroup><col style="width:39%"><col style="width:14%"><col style="width:14%"><col style="width:20%"><col style="width:13%"></colgroup><thead><tr><th>${projectList ? '项目名称' : '名称'}</th><th>${projectList ? '凭证数量' : '类别'}</th><th>金额</th><th>${projectList ? '状态' : '凭证状态'}</th><th style="text-align:right">操作</th></tr></thead><tbody>${filtered.map((n, i) => { const meta = nodeMeta(n); return `<tr><td><div class="name-cell">${fileIcon(n)}<div class="name-text"><button class="name-button" data-enter="${i}" title="${escapeHTML(n.name)}">${escapeHTML(n.name)}</button>${meta ? `<small>${escapeHTML(meta)}</small>` : ''}</div></div></td><td>${projectList ? n.fileCount + ' 份' : `<span class="category-pill">${escapeHTML(n.completeness?.kind || (n.isDirectory ? '费用分组' : n.category))}</span>`}</td><td class="amount-cell">${n.duplicateArchive ? '—' : n.amountCents ? '¥ ' + money(n.amountCents) : '<span class="subtle">待补充</span>'}</td><td>${projectList ? `<span class="status-pill ${isActive ? '' : 'complete'}">${isActive ? '正在报销' : '已报销'}</span>` : n.completeness?.checked ? `<span class="credential-badge ${n.completeness.complete ? 'complete' : 'incomplete'}">${n.completeness.complete ? `${icon('circle-check')} 凭证完整` : `${icon('circle-alert')} 缺${escapeHTML(n.completeness.missing.join('、'))}`}</span>` : `<span class="subtle">${new Date(n.modified).toLocaleDateString('zh-CN')}</span>`}</td><td><div class="row-actions"><button data-rename="${i}">改名</button><button data-reveal="${i}" title="在文件管理器中显示">${icon('external-link')}</button><button data-enter="${i}">${n.isDirectory ? '查看' : '预览'}</button></div></td></tr>`; }).join('')}</tbody></table></div>`;
+  const current = currentNode();
+  const allowMerge = isActive && !!current && current.relative === projectFor(current.relative)?.relative;
+  $('#table-container').innerHTML = `<div class="list-card"><table class="table"><colgroup><col style="width:35%"><col style="width:13%"><col style="width:16%"><col style="width:18%"><col style="width:18%"></colgroup><thead><tr><th>${projectList ? '项目名称' : '名称'}</th><th>${projectList ? '凭证数量' : '类别'}</th><th>金额</th><th>${projectList ? '状态' : '凭证状态'}</th><th style="text-align:right">操作</th></tr></thead><tbody>${filtered.map((n, i) => { const meta = nodeMeta(n); return `<tr><td><div class="name-cell">${fileIcon(n)}<div class="name-text"><button class="name-button" data-enter="${i}" title="${escapeHTML(n.name)}">${escapeHTML(n.name)}</button>${meta ? `<small>${escapeHTML(meta)}</small>` : ''}</div></div></td><td>${projectList ? n.fileCount + ' 份' : `<span class="category-pill">${escapeHTML(n.completeness?.kind || (n.isDirectory ? '费用分组' : n.category))}</span>`}</td><td class="amount-cell">${n.duplicateArchive ? '—' : n.amountCents ? '¥ ' + money(n.amountCents) : '<span class="subtle">待补充</span>'}</td><td>${projectList ? `<span class="status-pill ${isActive ? '' : 'complete'}">${isActive ? '正在报销' : '已报销'}</span>` : n.completeness?.checked ? `<span class="credential-badge ${n.completeness.complete ? 'complete' : 'incomplete'}">${n.completeness.complete ? `${icon('circle-check')} 凭证完整` : `${icon('circle-alert')} 缺${escapeHTML(n.completeness.missing.join('、'))}`}</span>` : `<span class="subtle">${new Date(n.modified).toLocaleDateString('zh-CN')}</span>`}</td><td><div class="row-actions"><button data-rename="${i}">改名</button>${!projectList && allowMerge && mergeMembers(n, nodes).length > 1 ? `<button data-merge="${i}">合并</button>` : ''}<button data-reveal="${i}" title="在文件管理器中显示">${icon('external-link')}</button><button data-enter="${i}">${n.isDirectory ? '查看' : '预览'}</button></div></td></tr>`; }).join('')}</tbody></table></div>`;
   $$('[data-enter]').forEach(button => button.onclick = () => { const n = filtered[button.dataset.enter]; if (n.isDirectory) selectProject(n.relative); else previewExisting(n); });
   $$('[data-reveal]').forEach(button => button.onclick = () => attempt(() => api.open(filtered[button.dataset.reveal].relative, true)));
+  $$('[data-merge]').forEach(button => button.onclick = () => {
+    const n = filtered[Number(button.dataset.merge)];
+    const members = mergeMembers(n, nodes);
+    if (members.length < 2) return;
+    ask({ title: '合并为同一笔？', description: `${members.map(member => `“${member.name}”`).join('、')}会移入一个费用文件夹，只计一次金额；文件夹名称需以金额结尾。`, input: mergeFolderName(n), confirm: '合并', action: async name => {
+      await api.organize({ target: parentOf(n.relative), folderName: name.trim(), amount: (n.amountCents / 100).toFixed(2), moves: members.map(member => ({ relative: member.relative, name: member.name })) });
+      await refresh();
+      toast('已合并为一笔，可在操作记录中撤回');
+    } });
+  });
   $$('[data-rename]').forEach(button => button.onclick = () => { const n = filtered[button.dataset.rename]; ask({ title: projectList ? '重命名项目文件夹' : n.isDirectory ? '重命名费用文件夹' : '重命名凭证', description: projectList ? '请输入新的文件夹名称。' : n.isDirectory ? '文件夹名称建议以“-金额”结尾，例如“网约车-40”。' : '请输入包含扩展名的新文件名，扩展名需要保持不变。', input: n.name, confirm: '保存名称', action: async name => { await api.rename(n.relative, name.trim()); await refresh(); toast(`${n.isDirectory ? '文件夹' : '文件'}已重命名，可在操作记录中撤回`); } }); });
 }
 function renderRootFiles(files) {
@@ -159,13 +219,13 @@ async function beginImport(paths) {
   delete $('#import-warning').dataset.serverError;
   renderImport();
   const unsubscribe = api.onProgress(({ row, done, total }) => {
-    state.rows.push({ ...row, amount: amountInput(row.amountCents), category: row.category || '' });
+    state.rows.push({ ...row, amount: amountInput(row.amountCents), category: row.category || '', documentType: defaultDocumentType(row.category, row.documentType) });
     $('#analysis-status').textContent = `正在识别 ${done} / ${total} 份凭证…`;
     renderImport();
   });
   try {
     const results = await api.analyze(paths);
-    state.rows = results.map(row => ({ ...row, amount: amountInput(row.amountCents), category: row.category || '' }));
+    state.rows = results.map(row => ({ ...row, amount: amountInput(row.amountCents), category: row.category || '', documentType: defaultDocumentType(row.category, row.documentType) }));
   }
   catch (error) { console.error('凭证识别失败', error); toast(error.message); }
   finally { unsubscribe(); state.analyzing = false; renderImport(); scheduleAutoImport(); }
@@ -177,9 +237,14 @@ function renderImport() {
   $('#analysis-status').textContent = state.analyzing ? `正在识别 ${state.rows.length} / ${state.totalFiles} 份凭证，图片识别可能需要片刻…` : `已读取 ${state.rows.length} 份凭证 · 请核对类别和实付金额`;
   $('#analysis-status').classList.toggle('loading', state.analyzing);
   $('#close-import').disabled = state.analyzing || state.importing;
-  $('#import-rows').innerHTML = state.rows.map((row, i) => `<div class="import-row ${row.error ? 'error-row' : ''}" id="import-row-${i}"><div class="import-file-header">${fileIcon({ name: row.name })}<div class="import-file-info"><strong title="${escapeHTML(row.name)}">第 ${i + 1} 份 · ${escapeHTML(row.name)}</strong><small>${escapeHTML(row.error || (row.source + (row.note ? ' · ' + row.note : ' · 已识别')))}</small></div><span class="missing-badge hidden" id="missing-badge-${i}">待补全</span>${!row.error ? `<button class="preview-button" data-preview-import="${i}">查看凭证</button>` : ''}<button class="remove-row" data-remove="${i}" title="从本次导入移除" ${state.analyzing || state.importing ? 'disabled' : ''}>${icon('x')}</button></div>${!row.error ? `<div class="import-fields ${state.grouped ? 'attachment-fields' : ''}">${!state.grouped ? `<label>费用类别<select data-category="${i}" aria-describedby="category-error-${i}">${categoryOptions(row.category)}</select><span id="category-error-${i}" class="field-error hidden">请选择费用类别</span></label><label>金额（元）<input data-amount="${i}" type="text" inputmode="decimal" value="${escapeHTML(row.amount)}" placeholder="0.00" aria-describedby="amount-error-${i}"><span id="amount-error-${i}" class="field-error hidden">请填写正确金额</span></label>${row.category === '高铁' ? `<label>高铁行程<input data-route="${i}" type="text" value="${escapeHTML(row.route || '')}" placeholder="长沙南-杭州东"></label>` : ''}` : ''}<label>凭证类型<select data-document-type="${i}">${documentTypeOptions(row.documentType)}</select></label><div class="rename-preview" id="rename-${i}"></div></div>` : ''}</div>`).join('');
+  $('#import-rows').innerHTML = state.rows.map((row, i) => `<div class="import-row ${row.error ? 'error-row' : ''}" id="import-row-${i}"><div class="import-file-header">${fileIcon({ name: row.name })}<div class="import-file-info"><strong title="${escapeHTML(row.name)}">第 ${i + 1} 份 · ${escapeHTML(row.name)}</strong><small>${escapeHTML(row.error || (row.source + (row.note ? ' · ' + row.note : ' · 已识别')))}</small></div><span class="missing-badge hidden" id="missing-badge-${i}">待补全</span>${!row.error ? `<button class="preview-button" data-preview-import="${i}">查看凭证</button>` : ''}<button class="remove-row" data-remove="${i}" title="从本次导入移除" ${state.analyzing || state.importing ? 'disabled' : ''}>${icon('x')}</button></div>${!row.error ? `<div class="import-fields ${state.grouped ? 'attachment-fields' : ''}">${!state.grouped ? `<label>费用类别<select data-category="${i}" aria-describedby="category-error-${i}">${categoryOptions(row.category)}</select><span id="category-error-${i}" class="field-error hidden">请选择费用类别</span></label><label>金额（元）<input data-amount="${i}" type="text" inputmode="decimal" value="${escapeHTML(row.amount)}" placeholder="0.00" aria-describedby="amount-error-${i}"><span id="amount-error-${i}" class="field-error hidden">请填写正确金额</span></label>${row.category === '高铁' ? `<label>高铁行程<input data-route="${i}" type="text" value="${escapeHTML(row.route || '')}" placeholder="出发站-到达站"></label>` : ''}` : ''}<label>凭证类型<select data-document-type="${i}">${documentTypeOptions(row.documentType)}</select></label><div class="rename-preview" id="rename-${i}"></div></div>` : ''}</div>`).join('');
   $$('[data-remove]').forEach(button => button.onclick = () => { clearTimeout(autoTimer); state.rows.splice(Number(button.dataset.remove), 1); renderImport(); });
-  $$('[data-category]').forEach(select => select.onchange = () => { state.rows[select.dataset.category].category = select.value; renderImport(); });
+  $$('[data-category]').forEach(select => select.onchange = () => {
+    const row = state.rows[select.dataset.category];
+    row.category = select.value;
+    row.documentType = defaultDocumentType(row.category, row.documentType);
+    renderImport();
+  });
   $$('[data-amount]').forEach(input => input.oninput = () => { state.rows[input.dataset.amount].amount = input.value.trim(); updateImportTotals(); });
   $$('[data-document-type]').forEach(select => select.onchange = () => { state.rows[select.dataset.documentType].documentType = select.value; updateImportTotals(); });
   $$('[data-route]').forEach(input => input.oninput = () => { state.rows[input.dataset.route].route = input.value; updateImportTotals(); });
@@ -330,7 +395,12 @@ $('#confirm-import').onclick = performImport;
 $('#mode-separate').onclick = () => { clearTimeout(autoTimer); state.grouped = false; renderImport(); };
 $('#mode-grouped').onclick = () => { clearTimeout(autoTimer); state.grouped = true; const first = state.rows.find(r => !r.error); if (first) { $('#group-category').value = first.category; $('#group-amount').value = first.amount; $('#group-route').value = first.route || ''; } renderImport(); };
 $('#merge-current-batch').onclick = () => $('#mode-grouped').click();
-$('#group-category').onchange = () => { $('#group-route-label').classList.toggle('hidden', $('#group-category').value !== '高铁'); updateImportTotals(); };
+$('#group-category').onchange = () => {
+  const category = $('#group-category').value;
+  $('#group-route-label').classList.toggle('hidden', category !== '高铁');
+  state.rows.forEach(row => { row.documentType = defaultDocumentType(category, row.documentType); });
+  renderImport();
+};
 $('#group-amount').oninput = $('#group-route').oninput = updateImportTotals;
 $('#auto-import').onchange = () => { localStorage.setItem('autoImport', $('#auto-import').checked); setTimeout(scheduleAutoImport, 0); };
 $('#import-overlay').addEventListener('input', () => clearTimeout(autoTimer));
