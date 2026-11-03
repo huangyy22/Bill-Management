@@ -162,7 +162,7 @@ function renderWorkspace(node, projects) {
   if (node) {
     const parent = parentOf(node.relative);
     const parentIsProject = parent && findNode(parent);
-    html += `<div class="detail-toolbar"><button id="go-back" class="back-button">${icon('arrow-left')} ${parentIsProject ? '上一级' : '全部项目'}</button><span class="path-label">${escapeHTML(node.relative)}</span><button id="open-current" class="secondary-button">打开文件夹 ${icon('external-link')}</button><button id="export-current" class="secondary-button">${icon('file-down')} 导出清单</button>${projectRoot ? `<button id="export-print" class="secondary-button">${icon('printer')} 导出打印文件夹</button><button id="change-status" class="secondary-button">${icon(isActive ? 'circle-check' : 'rotate-ccw')} ${isActive ? '标记已报销' : '恢复正在报销'}</button>` : ''}</div>`;
+    html += `<div class="detail-toolbar"><button id="go-back" class="back-button">${icon('arrow-left')} ${parentIsProject ? '上一级' : '全部项目'}</button><span class="path-label">${escapeHTML(node.relative)}</span><button id="open-current" class="secondary-button">打开文件夹 ${icon('external-link')}</button>${projectRoot ? `<button id="export-print" class="secondary-button">${icon('printer')} 导出打印文件夹</button>` : ''}${node.isDirectory && (isActive || projectRoot) ? `<button id="change-status" class="secondary-button">${icon(isActive ? 'circle-check' : 'rotate-ccw')} ${isActive ? '标记已报销' : '恢复为正在报销'}</button>` : ''}</div>`;
     const mergeCount = isActive && projectRoot ? mergeGroups(node.children).length : 0;
     if (mergeCount) html += `<div class="notice">发现 ${mergeCount} 组同金额凭证，可在右侧点“合并”把同一笔的附件合成一个费用文件夹。</div>`;
   }
@@ -177,9 +177,29 @@ function renderWorkspace(node, projects) {
   $('#category-filter')?.addEventListener('change', event => { state.category = event.target.value; renderTable(node.children, false); });
   $('#go-back')?.addEventListener('click', () => { const parent = parentOf(node.relative); selectProject(findNode(parent) ? parent : ''); });
   $('#open-current')?.addEventListener('click', () => attempt(() => api.open(node.relative)));
-  $('#export-current')?.addEventListener('click', () => attempt(async () => { if (await api.export(node.relative)) toast('报销清单已导出'); }));
   $('#export-print')?.addEventListener('click', () => attempt(async () => { const result = await api.exportPrint(node.relative); if (result) toast(`已扁平导出 ${result.count} 份凭证到报销目录下的“导出打印”文件夹，文件夹已打开`); }));
-  $('#change-status')?.addEventListener('click', () => ask({ title: isActive ? '这笔报销到账了吗？' : '恢复为正在报销？', description: isActive ? '整个项目会移入“已报销”文件夹，凭证与金额一同保留。' : '项目会移回报销根目录，可以继续添加凭证。', confirm: isActive ? '确认已报销' : '恢复项目', action: async () => { await api.status(node.relative, isActive); state.selected = ''; state.view = isActive ? 'completed' : 'active'; await refresh(); recordNav(); toast(isActive ? '项目已移入“已报销”' : '项目已恢复为正在报销'); } }));
+  $('#change-status')?.addEventListener('click', () => {
+    const isSubfolder = isActive && !projectRoot;
+    ask({
+      title: isActive ? (isSubfolder ? '这个费用文件夹到账了吗？' : '这笔报销到账了吗？') : '恢复为正在报销？',
+      description: isActive
+        ? (isSubfolder ? '这个文件夹会单独移入“已报销”，项目里的其他费用仍保留在正在报销。' : '整个项目会移入“已报销”文件夹，凭证与金额一同保留。')
+        : '会恢复到原来的项目位置，可以继续添加凭证。',
+      confirm: isActive ? '确认已报销' : '恢复',
+      action: async () => {
+        const result = await api.status(node.relative, isActive);
+        if (isSubfolder) {
+          state.view = 'active'; state.selected = parentOf(node.relative);
+        } else if (isActive) {
+          state.view = 'completed'; state.selected = '';
+        } else {
+          state.view = 'active'; state.selected = parentOf(result) || '';
+        }
+        await refresh(); recordNav();
+        toast(isActive ? '已标记为已报销' : '已恢复为正在报销');
+      }
+    });
+  });
 }
 function renderTable(nodes, projectList) {
   const filtered = nodes.filter(n => n.name.toLowerCase().includes(state.search.toLowerCase()) && (!state.category || n.category === state.category));
