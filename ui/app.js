@@ -12,7 +12,6 @@ const DRAG_TYPE = 'application/x-shizhang-file';
 let toastTimer, dragDepth = 0, autoTimer, draggingRelative = '';
 const nav = { entries: [], index: -1, applying: false };
 let lastNav = { direction: '', at: 0 };
-const editState = { node: null, extension: '' };
 function toast(message) { $('#toast').textContent = message; $('#toast').classList.remove('hidden'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('#toast').classList.add('hidden'), 6000); }
 async function attempt(fn) { try { return await fn(); } catch (error) { toast(error.message); } }
 function allProjects() { return [...state.snapshot.active, ...state.snapshot.completed]; }
@@ -35,8 +34,6 @@ function routeOf(node) {
   const match = /^高铁[（(]([^）)]+)[）)]/.exec(node.name);
   return match ? receiptNaming.cleanRoute(match[1]) : '';
 }
-const CATEGORY_PREFIX = /^(?:出租车|网约车|打车|高铁|住宿|物资费?|材料费?|快递费?|打印费?)[-+（(]/;
-function hasCategoryPrefix(name) { return CATEGORY_PREFIX.test(name); }
 function mergeMembers(node, nodes) {
   if (node.isDirectory || !node.amountCents) return [];
   const type = documentTypeOf(node);
@@ -189,7 +186,7 @@ function renderTable(nodes, projectList) {
   const isActive = state.view === 'active';
   const current = currentNode();
   const allowMerge = isActive && !!current && current.relative === projectFor(current.relative)?.relative;
-  $('#table-container').innerHTML = `<div class="list-card"><table class="table"><colgroup><col style="width:35%"><col style="width:13%"><col style="width:16%"><col style="width:18%"><col style="width:18%"></colgroup><thead><tr><th>${projectList ? '项目名称' : '名称'}</th><th>${projectList ? '凭证数量' : '类别'}</th><th>金额</th><th>${projectList ? '状态' : '凭证状态'}</th><th style="text-align:right">操作</th></tr></thead><tbody>${filtered.map((n, i) => { const meta = nodeMeta(n); return `<tr data-row="${i}"${!projectList && isActive && !n.isDirectory ? ' draggable="true"' : ''}><td><div class="name-cell">${fileIcon(n)}<div class="name-text"><button class="name-button" data-enter="${i}" title="${escapeHTML(n.name)}">${escapeHTML(n.name)}</button>${meta ? `<small>${escapeHTML(meta)}</small>` : ''}</div></div></td><td>${projectList ? n.fileCount + ' 份' : `<span class="category-pill">${escapeHTML(n.completeness?.kind || (n.isDirectory ? '费用分组' : n.category))}</span>`}</td><td class="amount-cell">${n.duplicateArchive ? '—' : n.amountCents ? '¥ ' + money(n.amountCents) : '<span class="subtle">待补充</span>'}</td><td>${projectList ? `<span class="status-pill ${isActive ? '' : 'complete'}">${isActive ? '正在报销' : '已报销'}</span>` : n.completeness?.checked ? `<span class="credential-badge ${n.completeness.complete ? 'complete' : 'incomplete'}">${n.completeness.complete ? `${icon('circle-check')} 凭证完整` : `${icon('circle-alert')} ${escapeHTML(n.completeness.label || `缺${n.completeness.missing.join('、')}`)}`}</span>` : '<span class="subtle">—</span>'}</td><td><div class="row-actions">${!projectList && (!n.isDirectory || hasCategoryPrefix(n.name)) ? `<button data-edit-category="${i}">改类别</button>` : `<button data-rename="${i}">改名</button>`}${!projectList && allowMerge && mergeMembers(n, nodes).length > 1 ? `<button data-merge="${i}">合并</button>` : ''}<button data-reveal="${i}" title="在文件管理器中显示">${icon('external-link')}</button>${isActive ? `<button data-delete="${i}">删除</button>` : n.isDirectory ? `<button data-enter="${i}">查看</button>` : `<button data-enter="${i}">预览</button>`}</div></td></tr>`; }).join('')}</tbody></table></div>`;
+  $('#table-container').innerHTML = `<div class="list-card"><table class="table"><colgroup><col style="width:35%"><col style="width:13%"><col style="width:16%"><col style="width:18%"><col style="width:18%"></colgroup><thead><tr><th>${projectList ? '项目名称' : '名称'}</th><th>${projectList ? '凭证数量' : '类别'}</th><th>金额</th><th>${projectList ? '状态' : '凭证状态'}</th><th style="text-align:right">操作</th></tr></thead><tbody>${filtered.map((n, i) => { const meta = nodeMeta(n); return `<tr data-row="${i}"${!projectList && isActive && !n.isDirectory ? ' draggable="true"' : ''}><td><div class="name-cell">${fileIcon(n)}<div class="name-text"><button class="name-button" data-enter="${i}" title="${escapeHTML(n.name)}">${escapeHTML(n.name)}</button>${meta ? `<small>${escapeHTML(meta)}</small>` : ''}</div></div></td><td>${projectList ? n.fileCount + ' 份' : `<span class="category-pill">${escapeHTML(n.completeness?.kind || (n.isDirectory ? '费用分组' : n.category))}</span>`}</td><td class="amount-cell">${n.duplicateArchive ? '—' : n.amountCents ? '¥ ' + money(n.amountCents) : '<span class="subtle">待补充</span>'}</td><td>${projectList ? `<span class="status-pill ${isActive ? '' : 'complete'}">${isActive ? '正在报销' : '已报销'}</span>` : n.completeness?.checked ? `<span class="credential-badge ${n.completeness.complete ? 'complete' : 'incomplete'}">${n.completeness.complete ? `${icon('circle-check')} 凭证完整` : `${icon('circle-alert')} ${escapeHTML(n.completeness.label || `缺${n.completeness.missing.join('、')}`)}`}</span>` : '<span class="subtle">—</span>'}</td><td><div class="row-actions"><button data-rename="${i}">改名</button>${!projectList && allowMerge && mergeMembers(n, nodes).length > 1 ? `<button data-merge="${i}">合并</button>` : ''}<button data-reveal="${i}" title="在文件管理器中显示">${icon('external-link')}</button>${isActive ? `<button data-delete="${i}">删除</button>` : n.isDirectory ? `<button data-enter="${i}">查看</button>` : `<button data-enter="${i}">预览</button>`}</div></td></tr>`; }).join('')}</tbody></table></div>`;
   $$('[data-enter]').forEach(button => button.onclick = () => { const n = filtered[button.dataset.enter]; if (n.isDirectory) selectProject(n.relative); else previewExisting(n); });
   $$('[data-reveal]').forEach(button => button.onclick = () => attempt(() => api.open(filtered[button.dataset.reveal].relative, true)));
   $$('[data-merge]').forEach(button => button.onclick = () => {
@@ -203,7 +200,6 @@ function renderTable(nodes, projectList) {
     } });
   });
   $$('[data-rename]').forEach(button => button.onclick = () => { const n = filtered[button.dataset.rename]; ask({ title: projectList ? '重命名项目文件夹' : n.isDirectory ? '重命名费用文件夹' : '重命名凭证', description: projectList ? '请输入新的文件夹名称。' : n.isDirectory ? '文件夹名称建议以“-金额”结尾，例如“网约车-40”。' : '请输入包含扩展名的新文件名，扩展名需要保持不变。', input: n.name, confirm: '保存名称', action: async name => { await api.rename(n.relative, name.trim()); await refresh(); toast(`${n.isDirectory ? '文件夹' : '文件'}已重命名，可在操作记录中撤回`); } }); });
-  $$('[data-edit-category]').forEach(button => button.onclick = () => openCategoryEditor(filtered[Number(button.dataset.editCategory)]));
   $$('[data-delete]').forEach(button => button.onclick = () => {
     const n = filtered[Number(button.dataset.delete)];
     const isProject = n.isDirectory && projectFor(n.relative)?.relative === n.relative;
@@ -269,8 +265,8 @@ function renderTable(nodes, projectList) {
   });
 }
 function renderRootFiles(files) {
-  $('#root-files').innerHTML = `<div class="list-card"><table class="table root-files-table"><colgroup><col style="width:60%"><col style="width:18%"><col style="width:22%"></colgroup><thead><tr><th>名称</th><th>金额</th><th style="text-align:right">操作</th></tr></thead><tbody>${files.map((file, i) => `<tr><td><div class="name-cell">${fileIcon(file)}<button class="name-button" data-root-preview="${i}" title="${escapeHTML(file.name)}">${escapeHTML(file.name)}</button></div></td><td class="amount-cell">${file.amountCents ? '¥ ' + money(file.amountCents) : '<span class="subtle">—</span>'}</td><td><div class="row-actions"><button data-root-edit="${i}">改类别</button><button data-root-reveal="${i}" title="在文件管理器中显示">${icon('external-link')}</button><button data-root-delete="${i}">删除</button></div></td></tr>`).join('')}</tbody></table></div>`;
-  $$('[data-root-edit]').forEach(button => button.onclick = () => openCategoryEditor(files[Number(button.dataset.rootEdit)]));
+  $('#root-files').innerHTML = `<div class="list-card"><table class="table root-files-table"><colgroup><col style="width:60%"><col style="width:18%"><col style="width:22%"></colgroup><thead><tr><th>名称</th><th>金额</th><th style="text-align:right">操作</th></tr></thead><tbody>${files.map((file, i) => `<tr><td><div class="name-cell">${fileIcon(file)}<button class="name-button" data-root-preview="${i}" title="${escapeHTML(file.name)}">${escapeHTML(file.name)}</button></div></td><td class="amount-cell">${file.amountCents ? '¥ ' + money(file.amountCents) : '<span class="subtle">—</span>'}</td><td><div class="row-actions"><button data-root-rename="${i}">改名</button><button data-root-reveal="${i}" title="在文件管理器中显示">${icon('external-link')}</button><button data-root-delete="${i}">删除</button></div></td></tr>`).join('')}</tbody></table></div>`;
+  $$('[data-root-rename]').forEach(button => button.onclick = () => { const file = files[Number(button.dataset.rootRename)]; ask({ title: '重命名文件', description: '请输入包含扩展名的新文件名，扩展名需要保持不变。', input: file.name, confirm: '保存名称', action: async name => { await api.rename(file.relative, name.trim()); await refresh(); toast('文件已重命名，可在操作记录中撤回'); } }); });
   $$('[data-root-reveal]').forEach(button => button.onclick = () => attempt(() => api.open(files[Number(button.dataset.rootReveal)].relative, true)));
   $$('[data-root-delete]').forEach(button => button.onclick = () => {
     const file = files[Number(button.dataset.rootDelete)];
@@ -300,59 +296,6 @@ function ask({ title, description, input, confirm = '确认', action }) {
   };
   $('#simple-cancel').onclick = () => { if (!$('#simple-confirm').disabled) $('#simple-overlay').classList.add('hidden'); };
   if (input !== undefined) setTimeout(() => { $('#simple-input').focus(); $('#simple-input').select(); }, 30);
-}
-function editPreviewName() {
-  const category = $('#edit-category').value;
-  const cents = centsOf($('#edit-amount').value.trim());
-  if (!category || !cents) return '';
-  const route = $('#edit-route').value.trim();
-  if (editState.node.isDirectory) return `${receiptNaming.categoryLabel(category, route)}-${shortAmount(cents)}`;
-  return receiptNaming.fileName(category, cents, editState.extension, $('#edit-type').value, editState.node.name, false, route);
-}
-function renderEditPreview() {
-  const isDirectory = !!editState.node?.isDirectory;
-  const category = $('#edit-category').value;
-  $('#edit-type-label').classList.toggle('hidden', isDirectory);
-  $('#edit-route-label').classList.toggle('hidden', isDirectory || category !== '高铁');
-  const name = editPreviewName();
-  $('#edit-preview').innerHTML = name ? `新名称 <strong>${escapeHTML(name)}</strong>` : '选择类别并填写金额后生成新名称';
-  $('#edit-confirm').disabled = !name;
-}
-function openCategoryEditor(node) {
-  const isDirectory = !!node.isDirectory;
-  const dot = node.name.lastIndexOf('.');
-  editState.node = node;
-  editState.extension = !isDirectory && dot > 0 ? node.name.slice(dot) : '';
-  $('#edit-title').textContent = isDirectory ? '修改文件夹类别与金额' : '修改类别与金额';
-  $('#edit-description').textContent = node.name;
-  $('#edit-category').innerHTML = categoryOptions(node.category || '');
-  $('#edit-amount').value = amountInput(node.ownAmount);
-  $('#edit-type').innerHTML = documentTypeOptions(receiptNaming.documentTypeFromText(node.name));
-  if (!isDirectory && $('#edit-category').value === '高铁' && ['', '发票', '订单'].includes($('#edit-type').value)) $('#edit-type').value = '车票';
-  $('#edit-route').value = routeOf(node);
-  $('#edit-error').textContent = '';
-  $('#edit-overlay').classList.remove('hidden');
-  renderEditPreview();
-  setTimeout(() => $('#edit-category').focus(), 30);
-}
-function closeCategoryEditor() {
-  $('#edit-overlay').classList.add('hidden');
-  editState.node = null;
-}
-async function saveCategoryEdit() {
-  const node = editState.node;
-  const name = editPreviewName();
-  if (!node || !name) return;
-  if (name === node.name) { closeCategoryEditor(); return; }
-  $('#edit-confirm').disabled = true;
-  try {
-    await api.rename(node.relative, name);
-    closeCategoryEditor();
-    await refresh();
-    toast('类别与金额已更新');
-  } catch (error) {
-    $('#edit-error').textContent = error.message;
-  } finally { $('#edit-confirm').disabled = false; }
 }
 function newProject() {
   const today = new Date();
@@ -568,16 +511,7 @@ $('#import-overlay').addEventListener('change', () => { delete $('#import-warnin
 $('#import-target').onchange = () => { updateImportTotals(); setTimeout(scheduleAutoImport, 0); };
 $('#close-preview').onclick = () => { $('#preview-overlay').classList.add('hidden'); $('#preview-body').replaceChildren(); };
 $('#simple-input').onkeydown = event => { if (event.key === 'Enter') $('#simple-confirm').click(); };
-$('#edit-cancel').onclick = closeCategoryEditor;
-$('#edit-confirm').onclick = saveCategoryEdit;
-$('#edit-category').onchange = () => {
-  if (!editState.node?.isDirectory && $('#edit-category').value === '高铁' && ['', '发票', '订单'].includes($('#edit-type').value)) $('#edit-type').value = '车票';
-  renderEditPreview();
-};
-$('#edit-amount').oninput = renderEditPreview;
-$('#edit-type').onchange = renderEditPreview;
-$('#edit-route').oninput = renderEditPreview;
-document.addEventListener('keydown', event => { if (event.key === 'Escape') { if (!$('#preview-overlay').classList.contains('hidden')) $('#close-preview').click(); else if (!$('#edit-overlay').classList.contains('hidden')) $('#edit-cancel').click(); else if (!$('#simple-overlay').classList.contains('hidden')) $('#simple-cancel').click(); else closeImport(); } });
+document.addEventListener('keydown', event => { if (event.key === 'Escape') { if (!$('#preview-overlay').classList.contains('hidden')) $('#close-preview').click(); else if (!$('#simple-overlay').classList.contains('hidden')) $('#simple-cancel').click(); else closeImport(); } });
 document.addEventListener('dragover', event => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; });
 document.addEventListener('dragenter', event => { event.preventDefault(); if (!event.dataTransfer.types.includes('Files')) return; dragDepth++; if ($('#import-overlay').classList.contains('hidden')) $('#drag-overlay').classList.remove('hidden'); });
 document.addEventListener('dragleave', event => { event.preventDefault(); dragDepth--; if (dragDepth <= 0) { dragDepth = 0; $('#drag-overlay').classList.add('hidden'); } });
