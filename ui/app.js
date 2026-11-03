@@ -141,7 +141,6 @@ function render() {
   $('#breadcrumb').textContent = viewLabel;
   $('#page-title').textContent = history ? '操作记录' : node ? node.name : viewLabel;
   $('#add-files').classList.toggle('hidden', state.view !== 'active');
-  $('#open-root-top').classList.toggle('hidden', !!node || history);
   const statNodes = node && !history ? [node] : state.view === 'completed' ? data.completed : data.active;
   const sum = statNodes.reduce((s, n) => s + n.amountCents, 0);
   const count = statNodes.reduce((s, n) => s + n.fileCount, 0);
@@ -163,11 +162,11 @@ function renderWorkspace(node, projects) {
   if (node) {
     const parent = parentOf(node.relative);
     const parentIsProject = parent && findNode(parent);
-    html += `<div class="detail-toolbar"><button id="go-back" class="back-button">${icon('arrow-left')} ${parentIsProject ? '上一级' : '全部项目'}</button><span class="path-label">${escapeHTML(node.relative)}</span><button id="open-current" class="secondary-button">打开文件夹 ${icon('external-link')}</button>${projectRoot ? `<button id="export-print" class="secondary-button">${icon('printer')} 导出打印文件夹</button>` : ''}${node.isDirectory && (isActive || node.canRestore) ? `<button id="change-status" class="secondary-button">${icon(isActive ? 'circle-check' : 'rotate-ccw')} ${isActive ? '标记已报销' : '恢复为正在报销'}</button>` : ''}</div>`;
+    html += `<div class="detail-toolbar"><button id="go-back" class="back-button">${icon('arrow-left')} ${parentIsProject ? '上一级' : '全部项目'}</button><span class="path-label">${escapeHTML(node.relative)}</span>${projectRoot ? `<button id="export-print" class="secondary-button">${icon('printer')} 导出打印文件夹</button>` : ''}${node.isDirectory && (isActive || node.canRestore) ? `<button id="change-status" class="secondary-button">${icon(isActive ? 'circle-check' : 'rotate-ccw')} ${isActive ? '标记已报销' : '恢复为正在报销'}</button>` : ''}</div>`;
     const mergeCount = isActive && projectRoot ? mergeGroups(node.children).length : 0;
     if (mergeCount) html += `<div class="notice">发现 ${mergeCount} 组同金额凭证，可在右侧点“合并”把同一笔的附件合成一个费用文件夹。</div>`;
   }
-  html += `<div class="section-heading"><h2>${node ? '凭证与费用' : '报销项目'} <span class="count-badge">${node ? node.children.length : projects.length}</span></h2><div class="section-actions"><input id="search" class="search-input" placeholder="搜索名称…" aria-label="搜索名称" value="${escapeHTML(state.search)}">${node ? `<select id="category-filter" class="filter-select" aria-label="筛选类别"><option value="">全部类别</option>${categoryOptions(state.category, false)}</select>` : ''}</div></div><div id="table-container"></div>`;
+  html += `<div class="section-heading"><h2>${node ? '凭证与费用' : '报销项目'} <span class="count-badge">${node ? node.children.length : projects.length}</span></h2><div class="section-actions"><button id="open-folder" class="secondary-button">打开文件夹 ${icon('external-link')}</button><input id="search" class="search-input" placeholder="搜索名称…" aria-label="搜索名称" value="${escapeHTML(state.search)}">${node ? `<select id="category-filter" class="filter-select" aria-label="筛选类别"><option value="">全部类别</option>${categoryOptions(state.category, false)}</select>` : ''}</div></div><div id="table-container"></div>`;
   if (!node && isActive && data.loose.length) html += `<section class="root-files-section"><div class="section-heading"><h2>根目录文件 <span class="count-badge">${data.loose.length}</span></h2></div><div id="root-files"></div></section>`;
   $('#workspace-content').innerHTML = html;
   renderTable(node ? node.children : projects, !node);
@@ -177,7 +176,7 @@ function renderWorkspace(node, projects) {
   $('#search').oninput = event => { state.search = event.target.value; renderTable(node ? node.children : projects, !node); };
   $('#category-filter')?.addEventListener('change', event => { state.category = event.target.value; renderTable(node.children, false); });
   $('#go-back')?.addEventListener('click', () => { const parent = parentOf(node.relative); selectProject(findNode(parent) ? parent : ''); });
-  $('#open-current')?.addEventListener('click', () => attempt(() => api.open(node.relative)));
+  $('#open-folder')?.addEventListener('click', () => attempt(() => api.open(node ? node.relative : '')));
   $('#export-print')?.addEventListener('click', () => attempt(async () => { const result = await api.exportPrint(node.relative); if (result) toast(`已扁平导出 ${result.count} 份凭证到报销目录下的“导出打印”文件夹，文件夹已打开`); }));
   $('#change-status')?.addEventListener('click', () => {
     const isSubfolder = isActive && !projectRoot;
@@ -586,7 +585,6 @@ function closeImport() { if (!state.analyzing && !state.importing) { clearTimeou
 $('#new-project').onclick = $('#new-project-icon').onclick = newProject;
 $('#add-files').onclick = pickFiles;
 $('#open-root').onclick = () => attempt(() => api.open(''));
-$('#open-root-top').onclick = () => attempt(() => api.open(''));
 $('#change-root').onclick = () => attempt(async () => {
   const snapshot = await api.changeRoot();
   if (!snapshot) return;
