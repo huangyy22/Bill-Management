@@ -162,7 +162,7 @@ function renderWorkspace(node, projects) {
   if (node) {
     const parent = parentOf(node.relative);
     const parentIsProject = parent && findNode(parent);
-    html += `<div class="detail-toolbar"><button id="go-back" class="back-button">${icon('arrow-left')} ${parentIsProject ? '上一级' : '全部项目'}</button><span class="path-label">${escapeHTML(node.relative)}</span><button id="open-current" class="secondary-button">打开文件夹 ${icon('external-link')}</button>${projectRoot ? `<button id="export-print" class="secondary-button">${icon('printer')} 导出打印文件夹</button>` : ''}${node.isDirectory && (isActive || projectRoot) ? `<button id="change-status" class="secondary-button">${icon(isActive ? 'circle-check' : 'rotate-ccw')} ${isActive ? '标记已报销' : '恢复为正在报销'}</button>` : ''}</div>`;
+    html += `<div class="detail-toolbar"><button id="go-back" class="back-button">${icon('arrow-left')} ${parentIsProject ? '上一级' : '全部项目'}</button><span class="path-label">${escapeHTML(node.relative)}</span><button id="open-current" class="secondary-button">打开文件夹 ${icon('external-link')}</button>${projectRoot ? `<button id="export-print" class="secondary-button">${icon('printer')} 导出打印文件夹</button>` : ''}${node.isDirectory && (isActive || node.canRestore) ? `<button id="change-status" class="secondary-button">${icon(isActive ? 'circle-check' : 'rotate-ccw')} ${isActive ? '标记已报销' : '恢复为正在报销'}</button>` : ''}</div>`;
     const mergeCount = isActive && projectRoot ? mergeGroups(node.children).length : 0;
     if (mergeCount) html += `<div class="notice">发现 ${mergeCount} 组同金额凭证，可在右侧点“合并”把同一笔的附件合成一个费用文件夹。</div>`;
   }
