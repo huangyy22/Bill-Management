@@ -11,8 +11,8 @@ contextBridge.exposeInMainWorld('api', {
   organize: options => call('organize', options), move: (source, target) => call('move', source, target), remove: relative => call('remove', relative),
   rename: (relative, name) => call('rename', relative, name), exportPrint: relative => call('export-print', relative),
   createProject: name => call('create-project', name), status: (relative, complete) => call('status', relative, complete),
-  undo: id => call('undo', id), open: (relative, reveal) => call('open', relative, reveal),
-  preview: file => call('preview', file), export: relative => call('export', relative),
+  undo: id => call('undo', id), open: relative => call('open', relative),
+  preview: file => call('preview', file),
   filePath: file => webUtils.getPathForFile(file),
   onNavigate: callback => { const listener = (_, direction) => callback(direction); ipcRenderer.on('navigate', listener); return () => ipcRenderer.removeListener('navigate', listener); },
   onProgress: callback => { const listener = (_, value) => callback(value); ipcRenderer.on('analysis-progress', listener); return () => ipcRenderer.removeListener('analysis-progress', listener); }
