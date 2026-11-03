@@ -85,6 +85,12 @@ p { line-height:1.7; }
 .table td { padding:15px 19px; border-bottom:1px solid #f0f2f7; font-size:12px; color:#7e899b; }
 .table tbody tr:last-child td { border-bottom:0; }
 .table tbody tr:hover { background:#fafbff; }
+.table tbody tr[draggable="true"] { cursor:grab; }
+.table tbody tr[draggable="true"] .name-button { cursor:grab; }
+.table tbody tr[draggable="true"].dragging { opacity:.45; }
+.table tbody tr.drop-target { background:#eef4ff; }
+.table tbody tr.drop-target td { border-bottom-color:#c7d7ff; }
+.table tbody tr.drop-target td:first-child { box-shadow:inset 3px 0 0 var(--blue); }
 .name-cell { display:flex; gap:12px; align-items:center; min-width:0; }
 .file-icon { height:35px; width:32px; display:grid; place-items:center; flex-shrink:0; border-radius:var(--radius); background:#f6f7f9; border:1px solid var(--line); color:var(--muted); font-size:17px; }
 .file-icon.pdf,.file-icon.image { background:#fff; color:var(--muted); }

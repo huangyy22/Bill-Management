@@ -8,7 +8,8 @@ const shortAmount = cents => (cents / 100).toFixed(2).replace(/\.00$/, '').repla
 const icon = (name, className = '') => `<i data-lucide="${name}"${className ? ` class="${className}"` : ''} aria-hidden="true"></i>`;
 function hydrateIcons() { if (window.lucide) window.lucide.createIcons({ attrs: { 'stroke-width': 1.75, 'aria-hidden': 'true' } }); }
 const state = { snapshot: null, categories: [], view: 'active', selected: localStorage.getItem('selectedProject') || '', search: '', category: '', rows: [], grouped: false, analyzing: false, importing: false, totalFiles: 0 };
-let toastTimer, dragDepth = 0, autoTimer;
+const DRAG_TYPE = 'application/x-shizhang-file';
+let toastTimer, dragDepth = 0, autoTimer, draggingRelative = '';
 function toast(message) { $('#toast').textContent = message; $('#toast').classList.remove('hidden'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('#toast').classList.add('hidden'), 6000); }
 async function attempt(fn) { try { return await fn(); } catch (error) { toast(error.message); } }
 function allProjects() { return [...state.snapshot.active, ...state.snapshot.completed]; }
@@ -19,6 +20,7 @@ function findNode(relative) {
 }
 // Snapshots come from Node's path module, so separators differ between Windows and Linux.
 function parentOf(relative) { const index = Math.max(relative.lastIndexOf('/'), relative.lastIndexOf('\\')); return index < 0 ? '' : relative.slice(0, index); }
+function baseName(relative) { return relative.split(/[\\/]/).pop(); }
 function absoluteOf(relative) { const separator = state.snapshot.root.includes('\\') ? '\\' : '/'; return state.snapshot.root.replace(/[\\/]+$/, '') + separator + relative; }
 function defaultDocumentType(category, documentType) {
   return category === '高铁' && ['', '发票', '订单'].includes(documentType || '') ? '车票' : (documentType || '');
@@ -155,7 +157,7 @@ function renderTable(nodes, projectList) {
   const isActive = state.view === 'active';
   const current = currentNode();
   const allowMerge = isActive && !!current && current.relative === projectFor(current.relative)?.relative;
-  $('#table-container').innerHTML = `<div class="list-card"><table class="table"><colgroup><col style="width:35%"><col style="width:13%"><col style="width:16%"><col style="width:18%"><col style="width:18%"></colgroup><thead><tr><th>${projectList ? '项目名称' : '名称'}</th><th>${projectList ? '凭证数量' : '类别'}</th><th>金额</th><th>${projectList ? '状态' : '凭证状态'}</th><th style="text-align:right">操作</th></tr></thead><tbody>${filtered.map((n, i) => { const meta = nodeMeta(n); return `<tr><td><div class="name-cell">${fileIcon(n)}<div class="name-text"><button class="name-button" data-enter="${i}" title="${escapeHTML(n.name)}">${escapeHTML(n.name)}</button>${meta ? `<small>${escapeHTML(meta)}</small>` : ''}</div></div></td><td>${projectList ? n.fileCount + ' 份' : `<span class="category-pill">${escapeHTML(n.completeness?.kind || (n.isDirectory ? '费用分组' : n.category))}</span>`}</td><td class="amount-cell">${n.duplicateArchive ? '—' : n.amountCents ? '¥ ' + money(n.amountCents) : '<span class="subtle">待补充</span>'}</td><td>${projectList ? `<span class="status-pill ${isActive ? '' : 'complete'}">${isActive ? '正在报销' : '已报销'}</span>` : n.completeness?.checked ? `<span class="credential-badge ${n.completeness.complete ? 'complete' : 'incomplete'}">${n.completeness.complete ? `${icon('circle-check')} 凭证完整` : `${icon('circle-alert')} 缺${escapeHTML(n.completeness.missing.join('、'))}`}</span>` : `<span class="subtle">${new Date(n.modified).toLocaleDateString('zh-CN')}</span>`}</td><td><div class="row-actions"><button data-rename="${i}">改名</button>${!projectList && allowMerge && mergeMembers(n, nodes).length > 1 ? `<button data-merge="${i}">合并</button>` : ''}<button data-reveal="${i}" title="在文件管理器中显示">${icon('external-link')}</button><button data-enter="${i}">${n.isDirectory ? '查看' : '预览'}</button></div></td></tr>`; }).join('')}</tbody></table></div>`;
+  $('#table-container').innerHTML = `<div class="list-card"><table class="table"><colgroup><col style="width:35%"><col style="width:13%"><col style="width:16%"><col style="width:18%"><col style="width:18%"></colgroup><thead><tr><th>${projectList ? '项目名称' : '名称'}</th><th>${projectList ? '凭证数量' : '类别'}</th><th>金额</th><th>${projectList ? '状态' : '凭证状态'}</th><th style="text-align:right">操作</th></tr></thead><tbody>${filtered.map((n, i) => { const meta = nodeMeta(n); return `<tr data-row="${i}"${!projectList && isActive && !n.isDirectory ? ' draggable="true"' : ''}><td><div class="name-cell">${fileIcon(n)}<div class="name-text"><button class="name-button" data-enter="${i}" title="${escapeHTML(n.name)}">${escapeHTML(n.name)}</button>${meta ? `<small>${escapeHTML(meta)}</small>` : ''}</div></div></td><td>${projectList ? n.fileCount + ' 份' : `<span class="category-pill">${escapeHTML(n.completeness?.kind || (n.isDirectory ? '费用分组' : n.category))}</span>`}</td><td class="amount-cell">${n.duplicateArchive ? '—' : n.amountCents ? '¥ ' + money(n.amountCents) : '<span class="subtle">待补充</span>'}</td><td>${projectList ? `<span class="status-pill ${isActive ? '' : 'complete'}">${isActive ? '正在报销' : '已报销'}</span>` : n.completeness?.checked ? `<span class="credential-badge ${n.completeness.complete ? 'complete' : 'incomplete'}">${n.completeness.complete ? `${icon('circle-check')} 凭证完整` : `${icon('circle-alert')} 缺${escapeHTML(n.completeness.missing.join('、'))}`}</span>` : `<span class="subtle">${new Date(n.modified).toLocaleDateString('zh-CN')}</span>`}</td><td><div class="row-actions"><button data-rename="${i}">改名</button>${!projectList && allowMerge && mergeMembers(n, nodes).length > 1 ? `<button data-merge="${i}">合并</button>` : ''}<button data-reveal="${i}" title="在文件管理器中显示">${icon('external-link')}</button><button data-enter="${i}">${n.isDirectory ? '查看' : '预览'}</button></div></td></tr>`; }).join('')}</tbody></table></div>`;
   $$('[data-enter]').forEach(button => button.onclick = () => { const n = filtered[button.dataset.enter]; if (n.isDirectory) selectProject(n.relative); else previewExisting(n); });
   $$('[data-reveal]').forEach(button => button.onclick = () => attempt(() => api.open(filtered[button.dataset.reveal].relative, true)));
   $$('[data-merge]').forEach(button => button.onclick = () => {
@@ -169,6 +171,52 @@ function renderTable(nodes, projectList) {
     } });
   });
   $$('[data-rename]').forEach(button => button.onclick = () => { const n = filtered[button.dataset.rename]; ask({ title: projectList ? '重命名项目文件夹' : n.isDirectory ? '重命名费用文件夹' : '重命名凭证', description: projectList ? '请输入新的文件夹名称。' : n.isDirectory ? '文件夹名称建议以“-金额”结尾，例如“网约车-40”。' : '请输入包含扩展名的新文件名，扩展名需要保持不变。', input: n.name, confirm: '保存名称', action: async name => { await api.rename(n.relative, name.trim()); await refresh(); toast(`${n.isDirectory ? '文件夹' : '文件'}已重命名，可在操作记录中撤回`); } }); });
+
+  const clearDropTargets = () => $$('.drop-target').forEach(row => row.classList.remove('drop-target'));
+  $$('tr[data-row]').forEach(row => {
+    const n = filtered[Number(row.dataset.row)];
+    if (!n || projectList || !isActive) return;
+    if (!n.isDirectory) {
+      row.ondragstart = event => {
+        draggingRelative = n.relative;
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData(DRAG_TYPE, n.relative);
+        event.dataTransfer.setData('text/plain', n.name);
+        row.classList.add('dragging');
+      };
+      row.ondragend = () => { draggingRelative = ''; row.classList.remove('dragging'); clearDropTargets(); };
+    } else {
+      row.ondragover = event => {
+        if (!draggingRelative || !event.dataTransfer.types.includes(DRAG_TYPE)) return;
+        const source = findNode(draggingRelative);
+        if (!source || source.isDirectory || parentOf(source.relative) === n.relative) return;
+        event.preventDefault();
+        event.stopPropagation();
+        event.dataTransfer.dropEffect = 'move';
+        row.classList.add('drop-target');
+      };
+      row.ondragleave = event => { if (!row.contains(event.relatedTarget)) row.classList.remove('drop-target'); };
+      row.ondrop = event => {
+        event.preventDefault();
+        event.stopPropagation();
+        row.classList.remove('drop-target');
+        const relative = event.dataTransfer.getData(DRAG_TYPE) || draggingRelative;
+        draggingRelative = '';
+        if (!relative) return;
+        const source = findNode(relative);
+        const performMove = async () => {
+          await api.move(relative, n.relative);
+          await refresh();
+          toast(`已移动 ${baseName(relative)} 到“${n.name}”`);
+        };
+        if (source && n.ownAmount !== null && source.amountCents && source.amountCents !== n.ownAmount) {
+          ask({ title: '移入后不会单独计金额', description: `“${n.name}”按名称中的 ¥${money(n.ownAmount)} 计入；这份凭证金额为 ¥${money(source.amountCents)}，移入后不再单独累加。`, confirm: '仍然移动', action: performMove });
+        } else {
+          attempt(performMove);
+        }
+      };
+    }
+  });
 }
 function renderRootFiles(files) {
   $('#root-files').innerHTML = `<div class="list-card"><table class="table root-files-table"><colgroup><col style="width:60%"><col style="width:18%"><col style="width:22%"></colgroup><thead><tr><th>名称</th><th>金额</th><th style="text-align:right">操作</th></tr></thead><tbody>${files.map((file, i) => `<tr><td><div class="name-cell">${fileIcon(file)}<button class="name-button" data-root-preview="${i}" title="${escapeHTML(file.name)}">${escapeHTML(file.name)}</button></div></td><td class="amount-cell">${file.amountCents ? '¥ ' + money(file.amountCents) : '<span class="subtle">—</span>'}</td><td><div class="row-actions"><button data-root-rename="${i}">改名</button><button data-root-reveal="${i}" title="在文件管理器中显示">${icon('external-link')}</button><button data-root-preview="${i}">预览</button></div></td></tr>`).join('')}</tbody></table></div>`;
@@ -414,6 +462,7 @@ document.addEventListener('dragenter', event => { event.preventDefault(); if (!e
 document.addEventListener('dragleave', event => { event.preventDefault(); dragDepth--; if (dragDepth <= 0) { dragDepth = 0; $('#drag-overlay').classList.add('hidden'); } });
 document.addEventListener('drop', event => {
   event.preventDefault(); dragDepth = 0; $('#drag-overlay').classList.add('hidden');
+  if (draggingRelative || event.dataTransfer.types.includes(DRAG_TYPE)) return;
   attempt(async () => {
     const paths = [...event.dataTransfer.files].map(file => api.filePath(file)).filter(Boolean);
     if (paths.length) await beginImport(paths);

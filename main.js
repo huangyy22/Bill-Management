@@ -113,6 +113,7 @@ handle('import', async options => {
   return store.importFiles(options);
 });
 handle('organize', options => store.organizeExisting(options));
+handle('move', (source, target) => store.moveEntry(source, target));
 handle('create-project', name => store.createProject(name));
 handle('rename', (relative, name) => store.renameEntry(relative, name));
 handle('status', (relative, complete) => store.markStatus(relative, complete));
