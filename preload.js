@@ -8,7 +8,7 @@ contextBridge.exposeInMainWorld('api', {
   snapshot: () => call('snapshot'), categories: () => call('categories'), pickFiles: () => call('pick-files'),
   changeRoot: () => call('change-root'),
   analyze: paths => call('analyze', paths), importFiles: options => call('import', options),
-  organize: options => call('organize', options), move: (source, target) => call('move', source, target),
+  organize: options => call('organize', options), move: (source, target) => call('move', source, target), remove: relative => call('remove', relative),
   rename: (relative, name) => call('rename', relative, name), exportPrint: relative => call('export-print', relative),
   createProject: name => call('create-project', name), status: (relative, complete) => call('status', relative, complete),
   undo: id => call('undo', id), open: (relative, reveal) => call('open', relative, reveal),

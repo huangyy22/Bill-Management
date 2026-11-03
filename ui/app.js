@@ -89,7 +89,6 @@ function fileIcon(node) {
 }
 function nodeMeta(node) {
   if (node.duplicateArchive) return '压缩附件';
-  if (node.addedAmount) return `新增 ¥${money(node.addedAmount)}`;
   if (node.isDirectory) return `${node.fileCount} 份`;
   if (!node.ownAmount) return '未标金额';
   return '';
@@ -131,8 +130,6 @@ function renderWorkspace(node, projects) {
     const parent = parentOf(node.relative);
     const parentIsProject = parent && findNode(parent);
     html += `<div class="detail-toolbar"><button id="go-back" class="back-button">${icon('arrow-left')} ${parentIsProject ? '上一级' : '全部项目'}</button><span class="path-label">${escapeHTML(node.relative)}</span><button id="open-current" class="secondary-button">打开文件夹 ${icon('external-link')}</button><button id="export-current" class="secondary-button">${icon('file-down')} 导出清单</button>${projectRoot ? `<button id="export-print" class="secondary-button">${icon('printer')} 导出打印文件夹</button><button id="change-status" class="secondary-button">${icon(isActive ? 'circle-check' : 'rotate-ccw')} ${isActive ? '标记已报销' : '恢复正在报销'}</button>` : ''}</div>`;
-    if (node.addedAmount) html += `<div class="notice">文件夹原标注 ¥${money(node.ownAmount)}，通过拾账新增 ¥${money(node.addedAmount)}，当前金额 ¥${money(node.amountCents)}。项目原名称保留；新增金额随操作记录保存。</div>`;
-    if (node.ownAmount && !node.addedAmount && node.children.some(n => n.unknownCount) === false && node.children.reduce((s, n) => s + n.amountCents, 0) !== node.ownAmount) html += `<div class="notice">此文件夹按名称标注的 ¥${money(node.ownAmount)} 计入；内部可识别明细与标注不同，请核对附件是否属于同一笔费用。</div>`;
     const mergeCount = isActive && projectRoot ? mergeGroups(node.children).length : 0;
     if (mergeCount) html += `<div class="notice">发现 ${mergeCount} 组同金额凭证，可在右侧点“合并”把同一笔的附件合成一个费用文件夹。</div>`;
   }
@@ -157,7 +154,7 @@ function renderTable(nodes, projectList) {
   const isActive = state.view === 'active';
   const current = currentNode();
   const allowMerge = isActive && !!current && current.relative === projectFor(current.relative)?.relative;
-  $('#table-container').innerHTML = `<div class="list-card"><table class="table"><colgroup><col style="width:35%"><col style="width:13%"><col style="width:16%"><col style="width:18%"><col style="width:18%"></colgroup><thead><tr><th>${projectList ? '项目名称' : '名称'}</th><th>${projectList ? '凭证数量' : '类别'}</th><th>金额</th><th>${projectList ? '状态' : '凭证状态'}</th><th style="text-align:right">操作</th></tr></thead><tbody>${filtered.map((n, i) => { const meta = nodeMeta(n); return `<tr data-row="${i}"${!projectList && isActive && !n.isDirectory ? ' draggable="true"' : ''}><td><div class="name-cell">${fileIcon(n)}<div class="name-text"><button class="name-button" data-enter="${i}" title="${escapeHTML(n.name)}">${escapeHTML(n.name)}</button>${meta ? `<small>${escapeHTML(meta)}</small>` : ''}</div></div></td><td>${projectList ? n.fileCount + ' 份' : `<span class="category-pill">${escapeHTML(n.completeness?.kind || (n.isDirectory ? '费用分组' : n.category))}</span>`}</td><td class="amount-cell">${n.duplicateArchive ? '—' : n.amountCents ? '¥ ' + money(n.amountCents) : '<span class="subtle">待补充</span>'}</td><td>${projectList ? `<span class="status-pill ${isActive ? '' : 'complete'}">${isActive ? '正在报销' : '已报销'}</span>` : n.completeness?.checked ? `<span class="credential-badge ${n.completeness.complete ? 'complete' : 'incomplete'}">${n.completeness.complete ? `${icon('circle-check')} 凭证完整` : `${icon('circle-alert')} 缺${escapeHTML(n.completeness.missing.join('、'))}`}</span>` : `<span class="subtle">${new Date(n.modified).toLocaleDateString('zh-CN')}</span>`}</td><td><div class="row-actions"><button data-rename="${i}">改名</button>${!projectList && allowMerge && mergeMembers(n, nodes).length > 1 ? `<button data-merge="${i}">合并</button>` : ''}<button data-reveal="${i}" title="在文件管理器中显示">${icon('external-link')}</button><button data-enter="${i}">${n.isDirectory ? '查看' : '预览'}</button></div></td></tr>`; }).join('')}</tbody></table></div>`;
+  $('#table-container').innerHTML = `<div class="list-card"><table class="table"><colgroup><col style="width:35%"><col style="width:13%"><col style="width:16%"><col style="width:18%"><col style="width:18%"></colgroup><thead><tr><th>${projectList ? '项目名称' : '名称'}</th><th>${projectList ? '凭证数量' : '类别'}</th><th>金额</th><th>${projectList ? '状态' : '凭证状态'}</th><th style="text-align:right">操作</th></tr></thead><tbody>${filtered.map((n, i) => { const meta = nodeMeta(n); return `<tr data-row="${i}"${!projectList && isActive && !n.isDirectory ? ' draggable="true"' : ''}><td><div class="name-cell">${fileIcon(n)}<div class="name-text"><button class="name-button" data-enter="${i}" title="${escapeHTML(n.name)}">${escapeHTML(n.name)}</button>${meta ? `<small>${escapeHTML(meta)}</small>` : ''}</div></div></td><td>${projectList ? n.fileCount + ' 份' : `<span class="category-pill">${escapeHTML(n.completeness?.kind || (n.isDirectory ? '费用分组' : n.category))}</span>`}</td><td class="amount-cell">${n.duplicateArchive ? '—' : n.amountCents ? '¥ ' + money(n.amountCents) : '<span class="subtle">待补充</span>'}</td><td>${projectList ? `<span class="status-pill ${isActive ? '' : 'complete'}">${isActive ? '正在报销' : '已报销'}</span>` : n.completeness?.checked ? `<span class="credential-badge ${n.completeness.complete ? 'complete' : 'incomplete'}">${n.completeness.complete ? `${icon('circle-check')} 凭证完整` : `${icon('circle-alert')} 缺${escapeHTML(n.completeness.missing.join('、'))}`}</span>` : `<span class="subtle">${new Date(n.modified).toLocaleDateString('zh-CN')}</span>`}</td><td><div class="row-actions"><button data-rename="${i}">改名</button>${!projectList && allowMerge && mergeMembers(n, nodes).length > 1 ? `<button data-merge="${i}">合并</button>` : ''}<button data-reveal="${i}" title="在文件管理器中显示">${icon('external-link')}</button>${n.isDirectory ? `<button data-enter="${i}">查看</button>` : isActive && !projectList ? `<button data-delete="${i}">删除</button>` : `<button data-enter="${i}">预览</button>`}</div></td></tr>`; }).join('')}</tbody></table></div>`;
   $$('[data-enter]').forEach(button => button.onclick = () => { const n = filtered[button.dataset.enter]; if (n.isDirectory) selectProject(n.relative); else previewExisting(n); });
   $$('[data-reveal]').forEach(button => button.onclick = () => attempt(() => api.open(filtered[button.dataset.reveal].relative, true)));
   $$('[data-merge]').forEach(button => button.onclick = () => {
@@ -171,6 +168,14 @@ function renderTable(nodes, projectList) {
     } });
   });
   $$('[data-rename]').forEach(button => button.onclick = () => { const n = filtered[button.dataset.rename]; ask({ title: projectList ? '重命名项目文件夹' : n.isDirectory ? '重命名费用文件夹' : '重命名凭证', description: projectList ? '请输入新的文件夹名称。' : n.isDirectory ? '文件夹名称建议以“-金额”结尾，例如“网约车-40”。' : '请输入包含扩展名的新文件名，扩展名需要保持不变。', input: n.name, confirm: '保存名称', action: async name => { await api.rename(n.relative, name.trim()); await refresh(); toast(`${n.isDirectory ? '文件夹' : '文件'}已重命名，可在操作记录中撤回`); } }); });
+  $$('[data-delete]').forEach(button => button.onclick = () => {
+    const n = filtered[Number(button.dataset.delete)];
+    ask({ title: '删除这份凭证？', description: `“${n.name}”会移到隐藏的回收目录，可在操作记录中撤回。`, confirm: '删除', action: async () => {
+      await api.remove(n.relative);
+      await refresh();
+      toast('已删除，可在操作记录中撤回');
+    } });
+  });
 
   const clearDropTargets = () => $$('.drop-target').forEach(row => row.classList.remove('drop-target'));
   $$('tr[data-row]').forEach(row => {
@@ -219,9 +224,17 @@ function renderTable(nodes, projectList) {
   });
 }
 function renderRootFiles(files) {
-  $('#root-files').innerHTML = `<div class="list-card"><table class="table root-files-table"><colgroup><col style="width:60%"><col style="width:18%"><col style="width:22%"></colgroup><thead><tr><th>名称</th><th>金额</th><th style="text-align:right">操作</th></tr></thead><tbody>${files.map((file, i) => `<tr><td><div class="name-cell">${fileIcon(file)}<button class="name-button" data-root-preview="${i}" title="${escapeHTML(file.name)}">${escapeHTML(file.name)}</button></div></td><td class="amount-cell">${file.amountCents ? '¥ ' + money(file.amountCents) : '<span class="subtle">—</span>'}</td><td><div class="row-actions"><button data-root-rename="${i}">改名</button><button data-root-reveal="${i}" title="在文件管理器中显示">${icon('external-link')}</button><button data-root-preview="${i}">预览</button></div></td></tr>`).join('')}</tbody></table></div>`;
+  $('#root-files').innerHTML = `<div class="list-card"><table class="table root-files-table"><colgroup><col style="width:60%"><col style="width:18%"><col style="width:22%"></colgroup><thead><tr><th>名称</th><th>金额</th><th style="text-align:right">操作</th></tr></thead><tbody>${files.map((file, i) => `<tr><td><div class="name-cell">${fileIcon(file)}<button class="name-button" data-root-preview="${i}" title="${escapeHTML(file.name)}">${escapeHTML(file.name)}</button></div></td><td class="amount-cell">${file.amountCents ? '¥ ' + money(file.amountCents) : '<span class="subtle">—</span>'}</td><td><div class="row-actions"><button data-root-rename="${i}">改名</button><button data-root-reveal="${i}" title="在文件管理器中显示">${icon('external-link')}</button><button data-root-delete="${i}">删除</button></div></td></tr>`).join('')}</tbody></table></div>`;
   $$('[data-root-rename]').forEach(button => button.onclick = () => { const file = files[Number(button.dataset.rootRename)]; ask({ title: '重命名文件', description: '请输入包含扩展名的新文件名，扩展名需要保持不变。', input: file.name, confirm: '保存名称', action: async name => { await api.rename(file.relative, name.trim()); await refresh(); toast('文件已重命名，可在操作记录中撤回'); } }); });
   $$('[data-root-reveal]').forEach(button => button.onclick = () => attempt(() => api.open(files[Number(button.dataset.rootReveal)].relative, true)));
+  $$('[data-root-delete]').forEach(button => button.onclick = () => {
+    const file = files[Number(button.dataset.rootDelete)];
+    ask({ title: '删除这份凭证？', description: `“${file.name}”会移到隐藏的回收目录，可在操作记录中撤回。`, confirm: '删除', action: async () => {
+      await api.remove(file.relative);
+      await refresh();
+      toast('已删除，可在操作记录中撤回');
+    } });
+  });
   $$('[data-root-preview]').forEach(button => button.onclick = () => previewExisting(files[Number(button.dataset.rootPreview)]));
 }
 function renderHistory() {
