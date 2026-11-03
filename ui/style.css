@@ -266,7 +266,7 @@ h1 { font-size:25px; font-weight:650; letter-spacing:.2px; }
 .category-pill { border:1px solid #d9dee6; border-radius:var(--radius-xs); padding:2px 6px; background:transparent; color:#58667a; }
 .credential-badge { border:1px solid; border-radius:var(--radius-xs); padding:3px 7px; background:transparent; }
 .credential-badge.complete { color:var(--blue); background:transparent; border-color:#cbd5f5; }
-.credential-badge.incomplete { color:var(--semantic); background:var(--semantic-bg); border-color:#e8c6ad; }
+.credential-badge.incomplete { color:#b42318; background:transparent; border-color:transparent; padding:3px 0; }
 .status-pill { border-radius:var(--radius-xs); background:transparent; border:1px solid #e8c6ad; }
 .status-pill.complete { background:transparent; border-color:#cbd5f5; }
 .row-actions button { color:#596b86; }
