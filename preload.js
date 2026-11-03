@@ -14,5 +14,6 @@ contextBridge.exposeInMainWorld('api', {
   undo: id => call('undo', id), open: (relative, reveal) => call('open', relative, reveal),
   preview: file => call('preview', file), export: relative => call('export', relative),
   filePath: file => webUtils.getPathForFile(file),
+  onNavigate: callback => { const listener = (_, direction) => callback(direction); ipcRenderer.on('navigate', listener); return () => ipcRenderer.removeListener('navigate', listener); },
   onProgress: callback => { const listener = (_, value) => callback(value); ipcRenderer.on('analysis-progress', listener); return () => ipcRenderer.removeListener('analysis-progress', listener); }
 });

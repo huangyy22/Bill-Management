@@ -54,6 +54,10 @@ else {
       if (!testMode) await writeConfig({ ...(await readConfig()), root: store.root });
       if (process.platform === 'win32') execFile('attrib.exe', ['+H', store.meta], { windowsHide: true }, () => {});
       window = new BrowserWindow({ width: 1440, height: 940, minWidth: 1080, minHeight: 720, title: '拾账 · 报销管理', icon: path.join(__dirname, 'assets', 'icon.png'), backgroundColor: '#f6f7fa', autoHideMenuBar: true, webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+      window.on('app-command', (event, command) => {
+        if (command === 'browser-backward') window.webContents.send('navigate', 'back');
+        else if (command === 'browser-forward') window.webContents.send('navigate', 'forward');
+      });
       window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
       window.webContents.on('will-navigate', event => event.preventDefault());
       await window.loadFile(path.join(__dirname, 'ui', 'index.html'));

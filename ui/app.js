@@ -10,6 +10,8 @@ function hydrateIcons() { if (window.lucide) window.lucide.createIcons({ attrs: 
 const state = { snapshot: null, categories: [], view: 'active', selected: localStorage.getItem('selectedProject') || '', search: '', category: '', rows: [], grouped: false, analyzing: false, importing: false, totalFiles: 0 };
 const DRAG_TYPE = 'application/x-shizhang-file';
 let toastTimer, dragDepth = 0, autoTimer, draggingRelative = '';
+const nav = { entries: [], index: -1, applying: false };
+let lastNav = { direction: '', at: 0 };
 function toast(message) { $('#toast').textContent = message; $('#toast').classList.remove('hidden'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('#toast').classList.add('hidden'), 6000); }
 async function attempt(fn) { try { return await fn(); } catch (error) { toast(error.message); } }
 function allProjects() { return [...state.snapshot.active, ...state.snapshot.completed]; }
@@ -69,6 +71,36 @@ function mergeFolderName(node) {
   return `${label}-${shortAmount(node.amountCents)}`;
 }
 function projectFor(relative) { return allProjects().find(p => relative === p.relative || relative.startsWith(p.relative + '/') || relative.startsWith(p.relative + '\\')); }
+function navState() { return { view: state.view, selected: state.selected }; }
+function navKey(entry) { return entry.view + '\u0000' + entry.selected; }
+function recordNav() {
+  if (nav.applying) return;
+  const current = navState();
+  if (nav.index >= 0 && navKey(nav.entries[nav.index]) === navKey(current)) return;
+  nav.entries = nav.entries.slice(0, nav.index + 1);
+  nav.entries.push(current);
+  nav.index = nav.entries.length - 1;
+}
+function resetNav() { nav.entries = [navState()]; nav.index = 0; }
+function applyNav(entry) {
+  nav.applying = true;
+  state.view = entry.view;
+  state.selected = entry.selected && findNode(entry.selected) ? entry.selected : '';
+  if (state.selected && state.view !== 'history') {
+    const project = projectFor(state.selected);
+    state.view = project && state.snapshot.completed.some(item => item.relative === project.relative) ? 'completed' : 'active';
+  }
+  state.search = ''; state.category = '';
+  render();
+  nav.applying = false;
+}
+function navigate(direction) {
+  const now = Date.now();
+  if (lastNav.direction === direction && now - lastNav.at < 200) return;
+  lastNav = { direction, at: now };
+  if (direction === 'back' && nav.index > 0) { nav.index--; applyNav(nav.entries[nav.index]); }
+  else if (direction === 'forward' && nav.index < nav.entries.length - 1) { nav.index++; applyNav(nav.entries[nav.index]); }
+}
 function currentNode() { return findNode(state.selected); }
 function categoryOptions(selected, placeholder = true) { return (placeholder ? '<option value="">选择类别</option>' : '') + state.categories.map(c => `<option ${c === selected ? 'selected' : ''}>${escapeHTML(c)}</option>`).join(''); }
 function documentTypeOptions(selected) { return '<option value="">普通凭证（不标注）</option>' + receiptNaming.DOCUMENT_TYPES.map(type => `<option ${type === selected ? 'selected' : ''}>${type}</option>`).join(''); }
@@ -79,7 +111,7 @@ async function refresh() {
 }
 function selectProject(relative) {
   state.selected = relative; state.search = ''; state.category = '';
-  localStorage.setItem('selectedProject', relative); render();
+  localStorage.setItem('selectedProject', relative); render(); recordNav();
 }
 function fileIcon(node) {
   if (node.isDirectory) return `<span class="file-icon">${icon('folder')}</span>`;
@@ -146,7 +178,7 @@ function renderWorkspace(node, projects) {
   $('#open-current')?.addEventListener('click', () => attempt(() => api.open(node.relative)));
   $('#export-current')?.addEventListener('click', () => attempt(async () => { if (await api.export(node.relative)) toast('报销清单已导出'); }));
   $('#export-print')?.addEventListener('click', () => attempt(async () => { const result = await api.exportPrint(node.relative); if (result) toast(`已扁平导出 ${result.count} 份凭证到报销目录下的“导出打印”文件夹，文件夹已打开`); }));
-  $('#change-status')?.addEventListener('click', () => ask({ title: isActive ? '这笔报销到账了吗？' : '恢复为正在报销？', description: isActive ? '整个项目会移入“已报销”文件夹，凭证与金额一同保留。' : '项目会移回报销根目录，可以继续添加凭证。', confirm: isActive ? '确认已报销' : '恢复项目', action: async () => { await api.status(node.relative, isActive); state.selected = ''; state.view = isActive ? 'completed' : 'active'; await refresh(); toast(isActive ? '项目已移入“已报销”' : '项目已恢复为正在报销'); } }));
+  $('#change-status')?.addEventListener('click', () => ask({ title: isActive ? '这笔报销到账了吗？' : '恢复为正在报销？', description: isActive ? '整个项目会移入“已报销”文件夹，凭证与金额一同保留。' : '项目会移回报销根目录，可以继续添加凭证。', confirm: isActive ? '确认已报销' : '恢复项目', action: async () => { await api.status(node.relative, isActive); state.selected = ''; state.view = isActive ? 'completed' : 'active'; await refresh(); recordNav(); toast(isActive ? '项目已移入“已报销”' : '项目已恢复为正在报销'); } }));
 }
 function renderTable(nodes, projectList) {
   const filtered = nodes.filter(n => n.name.toLowerCase().includes(state.search.toLowerCase()) && (!state.category || n.category === state.category));
@@ -419,7 +451,7 @@ async function performImport() {
     const result = await api.importFiles({ target, rows: state.rows.filter(r => !r.error).map(r => ({ path: r.path, category: r.category, amount: r.amount, documentType: r.documentType || '', route: r.route || '' })), grouped: state.grouped, groupCategory: $('#group-category').value, groupAmount: $('#group-amount').value.trim(), groupRoute: $('#group-route').value.trim() });
     $('#import-overlay').classList.add('hidden');
     state.view = 'active'; state.selected = target; state.search = ''; state.category = '';
-    await refresh(); toast(result.attachmentOnly ? `已补充 ${result.count} 份凭证，原费用金额保持不变。需要时可在操作记录中撤回。` : `已归档 ${result.count} 份凭证，计入 ¥${money(result.amountCents)}。需要时可在操作记录中撤回。`);
+    await refresh(); recordNav(); toast(result.attachmentOnly ? `已补充 ${result.count} 份凭证，原费用金额保持不变。需要时可在操作记录中撤回。` : `已归档 ${result.count} 份凭证，计入 ¥${money(result.amountCents)}。需要时可在操作记录中撤回。`);
   } catch (error) { $('#import-warning').textContent = error.message; $('#import-warning').dataset.serverError = 'true'; $('#import-warning').classList.remove('hidden'); }
   finally { state.importing = false; updateImportTotals(); }
 }
@@ -437,7 +469,7 @@ async function previewFile(file, name, relative) {
   });
 }
 function closeImport() { if (!state.analyzing && !state.importing) { clearTimeout(autoTimer); $('#import-overlay').classList.add('hidden'); } }
-['active', 'completed', 'history'].forEach(view => $(`#nav-${view}`).onclick = () => { state.view = view; state.selected = ''; state.search = ''; state.category = ''; render(); });
+['active', 'completed', 'history'].forEach(view => $(`#nav-${view}`).onclick = () => { state.view = view; state.selected = ''; state.search = ''; state.category = ''; render(); recordNav(); });
 $('#new-project').onclick = $('#new-project-icon').onclick = newProject;
 $('#add-files').onclick = pickFiles;
 $('#open-root').onclick = () => attempt(() => api.open(''));
@@ -448,6 +480,7 @@ $('#change-root').onclick = () => attempt(async () => {
   state.selected = ''; state.view = 'active'; state.search = ''; state.category = '';
   localStorage.removeItem('selectedProject');
   render();
+  resetNav();
   toast('已切换到新的报销文件夹');
 });
 $('#refresh').onclick = () => attempt(async () => { await refresh(); toast('目录已刷新'); });
@@ -483,5 +516,14 @@ document.addEventListener('drop', event => {
   });
 });
 window.addEventListener('focus', () => { if (state.snapshot && !state.analyzing && !state.importing) attempt(refresh); });
-async function init() { state.categories = await api.categories(); await refresh(); }
+api.onNavigate(direction => navigate(direction));
+window.addEventListener('auxclick', event => {
+  if (event.button === 3) { event.preventDefault(); navigate('back'); }
+  else if (event.button === 4) { event.preventDefault(); navigate('forward'); }
+});
+window.addEventListener('mouseup', event => {
+  if (event.button === 3) navigate('back');
+  else if (event.button === 4) navigate('forward');
+});
+async function init() { state.categories = await api.categories(); await refresh(); resetNav(); }
 init().catch(error => { $('#workspace-content').textContent = '读取目录失败：' + error.message; });
