@@ -198,6 +198,11 @@ footer span { margin:0 9px; }
 .small-dialog input { width:100%; margin:8px 0; font-size:13px; }
 .dialog-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:22px; }
 .form-error { font-size:11px; color:var(--semantic); min-height:10px; }
+.edit-dialog { width:480px; }
+.edit-fields { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px; }
+.edit-fields label { font-size:11px; color:#8e9bb2; }
+.edit-fields select,.edit-fields input { width:100%; margin-top:6px; }
+.edit-dialog .rename-preview { margin-top:14px; }
 .toast { position:fixed; bottom:30px; left:calc(50% + 122px); transform:translateX(-50%); max-width:650px; padding:14px 23px; border-radius:var(--radius); background:#273751; color:white; box-shadow:var(--shadow-overlay); font-size:12px; line-height:1.7; z-index:80; }
 .preview-panel { width:85vw; height:90vh; background:#fff; border-radius:var(--radius); box-shadow:var(--shadow-overlay); display:flex; flex-direction:column; overflow:hidden; }
 .preview-heading { padding:12px 20px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--line); }
