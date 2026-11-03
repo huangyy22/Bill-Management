@@ -186,7 +186,7 @@ function renderTable(nodes, projectList) {
   const isActive = state.view === 'active';
   const current = currentNode();
   const allowMerge = isActive && !!current && current.relative === projectFor(current.relative)?.relative;
-  $('#table-container').innerHTML = `<div class="list-card"><table class="table"><colgroup><col style="width:35%"><col style="width:13%"><col style="width:16%"><col style="width:18%"><col style="width:18%"></colgroup><thead><tr><th>${projectList ? '项目名称' : '名称'}</th><th>${projectList ? '凭证数量' : '类别'}</th><th>金额</th><th>${projectList ? '状态' : '凭证状态'}</th><th style="text-align:right">操作</th></tr></thead><tbody>${filtered.map((n, i) => { const meta = nodeMeta(n); return `<tr data-row="${i}"${!projectList && isActive && !n.isDirectory ? ' draggable="true"' : ''}><td><div class="name-cell">${fileIcon(n)}<div class="name-text"><button class="name-button" data-enter="${i}" title="${escapeHTML(n.name)}">${escapeHTML(n.name)}</button>${meta ? `<small>${escapeHTML(meta)}</small>` : ''}</div></div></td><td>${projectList ? n.fileCount + ' 份' : `<span class="category-pill">${escapeHTML(n.completeness?.kind || (n.isDirectory ? '费用分组' : n.category))}</span>`}</td><td class="amount-cell">${n.duplicateArchive ? '—' : n.amountCents ? '¥ ' + money(n.amountCents) : '<span class="subtle">待补充</span>'}</td><td>${projectList ? `<span class="status-pill ${isActive ? '' : 'complete'}">${isActive ? '正在报销' : '已报销'}</span>` : n.completeness?.checked ? `<span class="credential-badge ${n.completeness.complete ? 'complete' : 'incomplete'}">${n.completeness.complete ? `${icon('circle-check')} 凭证完整` : `${icon('circle-alert')} 缺${escapeHTML(n.completeness.missing.join('、'))}`}</span>` : '<span class="subtle">—</span>'}</td><td><div class="row-actions"><button data-rename="${i}">改名</button>${!projectList && allowMerge && mergeMembers(n, nodes).length > 1 ? `<button data-merge="${i}">合并</button>` : ''}<button data-reveal="${i}" title="在文件管理器中显示">${icon('external-link')}</button>${n.isDirectory ? `<button data-enter="${i}">查看</button>` : isActive && !projectList ? `<button data-delete="${i}">删除</button>` : `<button data-enter="${i}">预览</button>`}</div></td></tr>`; }).join('')}</tbody></table></div>`;
+  $('#table-container').innerHTML = `<div class="list-card"><table class="table"><colgroup><col style="width:35%"><col style="width:13%"><col style="width:16%"><col style="width:18%"><col style="width:18%"></colgroup><thead><tr><th>${projectList ? '项目名称' : '名称'}</th><th>${projectList ? '凭证数量' : '类别'}</th><th>金额</th><th>${projectList ? '状态' : '凭证状态'}</th><th style="text-align:right">操作</th></tr></thead><tbody>${filtered.map((n, i) => { const meta = nodeMeta(n); return `<tr data-row="${i}"${!projectList && isActive && !n.isDirectory ? ' draggable="true"' : ''}><td><div class="name-cell">${fileIcon(n)}<div class="name-text"><button class="name-button" data-enter="${i}" title="${escapeHTML(n.name)}">${escapeHTML(n.name)}</button>${meta ? `<small>${escapeHTML(meta)}</small>` : ''}</div></div></td><td>${projectList ? n.fileCount + ' 份' : `<span class="category-pill">${escapeHTML(n.completeness?.kind || (n.isDirectory ? '费用分组' : n.category))}</span>`}</td><td class="amount-cell">${n.duplicateArchive ? '—' : n.amountCents ? '¥ ' + money(n.amountCents) : '<span class="subtle">待补充</span>'}</td><td>${projectList ? `<span class="status-pill ${isActive ? '' : 'complete'}">${isActive ? '正在报销' : '已报销'}</span>` : n.completeness?.checked ? `<span class="credential-badge ${n.completeness.complete ? 'complete' : 'incomplete'}">${n.completeness.complete ? `${icon('circle-check')} 凭证完整` : `${icon('circle-alert')} 缺${escapeHTML(n.completeness.missing.join('、'))}`}</span>` : '<span class="subtle">—</span>'}</td><td><div class="row-actions"><button data-rename="${i}">改名</button>${!projectList && allowMerge && mergeMembers(n, nodes).length > 1 ? `<button data-merge="${i}">合并</button>` : ''}<button data-reveal="${i}" title="在文件管理器中显示">${icon('external-link')}</button>${isActive ? `<button data-delete="${i}">删除</button>` : n.isDirectory ? `<button data-enter="${i}">查看</button>` : `<button data-enter="${i}">预览</button>`}</div></td></tr>`; }).join('')}</tbody></table></div>`;
   $$('[data-enter]').forEach(button => button.onclick = () => { const n = filtered[button.dataset.enter]; if (n.isDirectory) selectProject(n.relative); else previewExisting(n); });
   $$('[data-reveal]').forEach(button => button.onclick = () => attempt(() => api.open(filtered[button.dataset.reveal].relative, true)));
   $$('[data-merge]').forEach(button => button.onclick = () => {
@@ -202,7 +202,12 @@ function renderTable(nodes, projectList) {
   $$('[data-rename]').forEach(button => button.onclick = () => { const n = filtered[button.dataset.rename]; ask({ title: projectList ? '重命名项目文件夹' : n.isDirectory ? '重命名费用文件夹' : '重命名凭证', description: projectList ? '请输入新的文件夹名称。' : n.isDirectory ? '文件夹名称建议以“-金额”结尾，例如“网约车-40”。' : '请输入包含扩展名的新文件名，扩展名需要保持不变。', input: n.name, confirm: '保存名称', action: async name => { await api.rename(n.relative, name.trim()); await refresh(); toast(`${n.isDirectory ? '文件夹' : '文件'}已重命名，可在操作记录中撤回`); } }); });
   $$('[data-delete]').forEach(button => button.onclick = () => {
     const n = filtered[Number(button.dataset.delete)];
-    ask({ title: '删除这份凭证？', description: `“${n.name}”会移到隐藏的回收目录，可在操作记录中撤回。`, confirm: '删除', action: async () => {
+    const isProject = n.isDirectory && projectFor(n.relative)?.relative === n.relative;
+    const title = n.isDirectory ? (isProject ? '删除整个报销项目？' : '删除这个文件夹？') : '删除这份凭证？';
+    const description = n.isDirectory
+      ? `“${n.name}”${isProject ? '及其中所有凭证' : '及其中所有文件'}会移到隐藏的回收目录，可在操作记录中撤回。`
+      : `“${n.name}”会移到隐藏的回收目录，可在操作记录中撤回。`;
+    ask({ title, description, confirm: '删除', action: async () => {
       await api.remove(n.relative);
       await refresh();
       toast('已删除，可在操作记录中撤回');
@@ -212,6 +217,10 @@ function renderTable(nodes, projectList) {
   const clearDropTargets = () => $$('.drop-target').forEach(row => row.classList.remove('drop-target'));
   $$('tr[data-row]').forEach(row => {
     const n = filtered[Number(row.dataset.row)];
+    if (n) row.ondblclick = event => {
+      if (event.target.closest('button, input, select, a')) return;
+      if (n.isDirectory) selectProject(n.relative); else previewExisting(n);
+    };
     if (!n || projectList || !isActive) return;
     if (!n.isDirectory) {
       row.ondragstart = event => {
