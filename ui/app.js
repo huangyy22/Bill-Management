@@ -299,13 +299,38 @@ function ask({ title, description, input, confirm = '确认', action }) {
   $('#simple-cancel').onclick = () => { if (!$('#simple-confirm').disabled) $('#simple-overlay').classList.add('hidden'); };
   if (input !== undefined) setTimeout(() => { $('#simple-input').focus(); $('#simple-input').select(); }, 30);
 }
+function customEditName(value) {
+  const custom = String(value || '').trim();
+  if (!custom) return '';
+  const extension = editState.extension || '';
+  if (!extension) return custom;
+  if (custom.toLowerCase().endsWith(extension.toLowerCase())) return custom;
+  if (/\.[a-z0-9]{1,8}$/i.test(custom)) return custom.replace(/\.[a-z0-9]{1,8}$/i, '') + extension;
+  return custom + extension;
+}
 function editPreviewName() {
+  if (!$('#edit-custom-row').classList.contains('hidden')) {
+    const custom = customEditName($('#edit-name').value);
+    if (custom) return custom;
+  }
   const category = $('#edit-category').value;
   const cents = centsOf($('#edit-amount').value.trim());
-  if (!category || !cents) return '';
   const route = $('#edit-route').value.trim();
-  if (editState.node.isDirectory) return `${receiptNaming.categoryLabel(category, route)}-${shortAmount(cents)}`;
-  return receiptNaming.fileName(category, cents, editState.extension, $('#edit-type').value, editState.node.name, false, route);
+  if (editState.node.isDirectory) {
+    if (category && cents) return `${receiptNaming.categoryLabel(category, route)}-${shortAmount(cents)}`;
+    if (category) return receiptNaming.categoryLabel(category, route);
+    if (cents) return shortAmount(cents);
+    return '';
+  }
+  if (category && cents) return receiptNaming.fileName(category, cents, editState.extension, $('#edit-type').value, editState.node.name, false, route);
+  if (category) {
+    const label = receiptNaming.categoryLabel(category, route);
+    const documentType = $('#edit-type').value;
+    const type = category === '高铁' && route && documentType === '车票' ? '' : documentType;
+    return `${label}${type ? '-' + type : ''}${editState.extension}`;
+  }
+  if (cents) return `${shortAmount(cents)}${editState.extension}`;
+  return '';
 }
 function renderEditPreview() {
   const isDirectory = !!editState.node?.isDirectory;
@@ -313,7 +338,7 @@ function renderEditPreview() {
   $('#edit-type-label').classList.toggle('hidden', isDirectory);
   $('#edit-route-label').classList.toggle('hidden', isDirectory || category !== '高铁');
   const name = editPreviewName();
-  $('#edit-preview').innerHTML = name ? `新名称 <strong>${escapeHTML(name)}</strong>` : '选择类别并填写金额后生成新名称';
+  $('#edit-preview').innerHTML = name ? `新名称 <strong>${escapeHTML(name)}</strong>` : '填写类别、金额，或使用自定义命名';
   $('#edit-confirm').disabled = !name;
 }
 function openCategoryEditor(node) {
@@ -324,6 +349,10 @@ function openCategoryEditor(node) {
   $('#edit-title').textContent = isDirectory ? '改名 · 文件夹' : '改名 · 类别与金额';
   $('#edit-description').textContent = node.name;
   $('#edit-file-preview').classList.toggle('hidden', isDirectory);
+  $('#edit-custom-toggle').classList.toggle('hidden', isDirectory);
+  $('#edit-custom-row').classList.add('hidden');
+  $('#edit-name').value = '';
+  $('#edit-name').placeholder = `例如：验收照片（自动保留 ${editState.extension || '扩展名'}）`;
   $('#edit-category').innerHTML = categoryOptions(node.category || '');
   $('#edit-amount').value = amountInput(node.ownAmount);
   $('#edit-type').innerHTML = documentTypeOptions(receiptNaming.documentTypeFromText(node.name));
@@ -348,7 +377,7 @@ async function saveCategoryEdit() {
     await api.rename(node.relative, name);
     closeCategoryEditor();
     await refresh();
-    toast('类别与金额已更新');
+    toast('已改名');
   } catch (error) {
     $('#edit-error').textContent = error.message;
   } finally { $('#edit-confirm').disabled = false; }
@@ -570,6 +599,13 @@ $('#simple-input').onkeydown = event => { if (event.key === 'Enter') $('#simple-
 $('#edit-cancel').onclick = closeCategoryEditor;
 $('#edit-confirm').onclick = saveCategoryEdit;
 $('#edit-file-preview').onclick = () => { if (editState.node) previewExisting(editState.node); };
+$('#edit-custom-toggle').onclick = () => {
+  const row = $('#edit-custom-row');
+  row.classList.toggle('hidden');
+  if (!row.classList.contains('hidden')) setTimeout(() => $('#edit-name').focus(), 0);
+  renderEditPreview();
+};
+$('#edit-name').oninput = renderEditPreview;
 $('#edit-category').onchange = () => {
   if (!editState.node?.isDirectory && $('#edit-category').value === '高铁' && ['', '发票', '订单'].includes($('#edit-type').value)) $('#edit-type').value = '车票';
   renderEditPreview();
