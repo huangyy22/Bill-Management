@@ -14,7 +14,8 @@ const testRoot = process.env.SHIZHANG_TEST_ROOT;
 if (testMode) app.setPath('userData', path.join(testRoot, '.test-profile'));
 
 async function readConfig() {
-  try { return JSON.parse(await fs.readFile(configPath, 'utf8')); } catch { return {}; }
+  // Windows editors (Notepad, PowerShell 5) may save JSON with a UTF-8 BOM.
+  try { return JSON.parse((await fs.readFile(configPath, 'utf8')).replace(/^\uFEFF/, '')); } catch { return {}; }
 }
 async function writeConfig(config) {
   const temp = configPath + '.tmp';
