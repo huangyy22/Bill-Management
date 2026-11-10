@@ -35,36 +35,39 @@ function routeOf(node) {
   const match = /^高铁[（(]([^）)]+)[）)]/.exec(node.name);
   return match ? receiptNaming.cleanRoute(match[1]) : '';
 }
+function mergeCompatible(node, other) {
+  if (node.category !== other.category && node.category !== '其他' && other.category !== '其他') return false;
+  if (node.category === '高铁' && other.category === '高铁') return routeOf(node) === routeOf(other);
+  return true;
+}
 function mergeMembers(node, nodes) {
   if (node.isDirectory || !node.amountCents) return [];
-  const type = documentTypeOf(node);
-  if (!type) return [];
   const parent = parentOf(node.relative);
   const group = nodes.filter(other => !other.isDirectory && other.amountCents === node.amountCents &&
-    other.category === node.category && parentOf(other.relative) === parent &&
-    (node.category !== '高铁' || routeOf(other) === routeOf(node)) &&
-    documentTypeOf(other));
-  if (new Set(group.map(documentTypeOf)).size < 2) return [];
+    parentOf(other.relative) === parent && mergeCompatible(node, other));
+  const routes = new Set(group.filter(other => other.category === '高铁').map(routeOf).filter(Boolean));
+  if (routes.size > 1) return [];
+  const knownTypes = new Set(group.map(documentTypeOf).filter(Boolean));
+  if (!knownTypes.size || group.length < 2) return [];
   const members = [node];
   for (const other of group) {
+    if (other === node) continue;
     const otherType = documentTypeOf(other);
-    if (members.some(member => documentTypeOf(member) === otherType)) continue;
+    if (otherType && members.some(member => documentTypeOf(member) === otherType)) continue;
     members.push(other);
   }
-  return members;
+  return members.length >= 2 ? members : [];
 }
 function mergeGroups(nodes) {
-  const groups = new Map();
+  const groups = [], seen = new Set();
   for (const node of nodes) {
-    if (node.isDirectory || !node.amountCents) continue;
-    const type = documentTypeOf(node);
-    if (!type) continue;
-    const key = [parentOf(node.relative), node.category, node.amountCents, node.category === '高铁' ? routeOf(node) : ''].join('\u0000');
-    const group = groups.get(key) || [];
-    group.push({ node, type });
-    groups.set(key, group);
+    const members = mergeMembers(node, nodes);
+    if (members.length < 2) continue;
+    const key = members.map(member => member.relative).sort().join('\u0000');
+    if (seen.has(key)) continue;
+    seen.add(key); groups.push(members);
   }
-  return [...groups.values()].filter(group => new Set(group.map(item => item.type)).size > 1);
+  return groups;
 }
 function mergeFolderName(node) {
   const route = routeOf(node);
@@ -213,8 +216,24 @@ function renderTable(nodes, projectList) {
     const n = filtered[Number(button.dataset.merge)];
     const members = mergeMembers(n, nodes);
     if (members.length < 2) return;
-    ask({ title: '合并为同一笔？', description: `${members.map(member => `“${member.name}”`).join('、')}会移入一个费用文件夹，只计一次金额；文件夹名称需以金额结尾。`, input: mergeFolderName(n), confirm: '合并', action: async name => {
-      await api.organize({ target: parentOf(n.relative), folderName: name.trim(), amount: (n.amountCents / 100).toFixed(2), moves: members.map(member => ({ relative: member.relative, name: member.name })) });
+    const representative = members.find(member => member.category && member.category !== '其他') || n;
+    const category = representative.category || n.category || '其他';
+    const route = routeOf(representative);
+    const extensionOf = name => { const dot = name.lastIndexOf('.'); return dot > 0 ? name.slice(dot) : ''; };
+    const occupied = new Set(members.map(member => member.name.toLowerCase()));
+    const payment = n.amountCents <= 50000 && !members.some(member => documentTypeOf(member) === '付款记录')
+      ? members.find(member => !documentTypeOf(member) && member.category === category && /\.(jpe?g|png|webp|bmp|gif)$/i.test(member.name))
+      : null;
+    const moves = members.map(member => {
+      if (member !== payment) return { relative: member.relative, name: member.name };
+      const base = `${receiptNaming.categoryLabel(category, route)}-付款记录-${shortAmount(member.amountCents)}`;
+      let name = base + extensionOf(member.name), suffix = 2;
+      while (occupied.has(name.toLowerCase())) name = `${base} (${suffix++})${extensionOf(member.name)}`;
+      occupied.add(name.toLowerCase());
+      return { relative: member.relative, name };
+    });
+    ask({ title: '合并为同一笔？', description: `${members.map(member => `“${member.name}”`).join('、')}会移入一个费用文件夹，只计一次金额；文件夹名称需以金额结尾。`, input: mergeFolderName(representative), confirm: '合并', action: async name => {
+      await api.organize({ target: parentOf(n.relative), folderName: name.trim(), amount: (n.amountCents / 100).toFixed(2), moves });
       await refresh();
       toast('已合并为一笔，可在操作记录中撤回');
     } });
